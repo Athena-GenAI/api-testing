@@ -9,6 +9,9 @@ def fetch_and_process_assets():
     API_KEY = "egbJblmxMkXtjsN9coJzdADQ836i9OM__nhMPzveppsHELaKv8SrUQw"
     API_URL = "https://yields.llama.fi/poolsBorrow"
     
+    # Whitelist of desired symbols
+    desired_symbols = ('SCRVUSD', 'DOLA', 'GHO', 'USDC', 'USDT', 'WETH', 'WBTC', 'WSTETH', 'RETH', 'SFRXETH', 'SUSDE', 'USDE')
+    
     try:
         headers = {
             "Authorization": f"Bearer {API_KEY}",
@@ -21,18 +24,22 @@ def fetch_and_process_assets():
         data = response.json()
         
         if "data" in data:
-            # Filter for projects starting with 'aave-' and having valid apyPct1D values
+            # Filter for:
+            # 1. Projects starting with 'aave-'
+            # 2. Having valid APY
+            # 3. Symbol in whitelist
             aave_assets = [
                 asset for asset in data["data"]
                 if asset.get('project', '').lower().startswith('aave-') and 
-                   asset.get('apy') is not None
+                   asset.get('apy') is not None and
+                   asset.get('symbol', '').upper() in desired_symbols
             ]
             
             if not aave_assets:
                 error_result = {
                     "timestamp": timestamp,
                     "error": "No valid Aave assets found",
-                    "message": "No assets from Aave with valid yield data were found"
+                    "message": "No whitelisted assets from Aave with valid yield data were found"
                 }
                 filepath = os.path.join(script_dir, f"pools_borrow_response_error_{timestamp}.json")
                 with open(filepath, "w") as f:
