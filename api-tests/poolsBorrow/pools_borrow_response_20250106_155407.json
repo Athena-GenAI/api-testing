@@ -1,0 +1,23 @@
+{
+  "timestamp": "20250106_155407",
+  "top_3_apy": [
+    {
+      "chain": "Ethereum",
+      "project": "aave-v2",
+      "symbol": "USDT",
+      "apy": 15.52783
+    },
+    {
+      "chain": "Scroll",
+      "project": "aave-v3",
+      "symbol": "USDC",
+      "apy": 12.93852
+    },
+    {
+      "chain": "Polygon",
+      "project": "aave-v3",
+      "symbol": "EURS",
+      "apy": 11.55921
+    }
+  ]
+}

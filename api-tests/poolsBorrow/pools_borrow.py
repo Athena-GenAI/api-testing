@@ -25,7 +25,7 @@ def fetch_and_process_assets():
             aave_assets = [
                 asset for asset in data["data"]
                 if asset.get('project', '').lower().startswith('aave-') and 
-                   asset.get('apyPct1D') is not None
+                   asset.get('apy') is not None
             ]
             
             if not aave_assets:
@@ -39,21 +39,24 @@ def fetch_and_process_assets():
                     json.dump(error_result, f, indent=2)
                 return error_result
             
-            # Find largest yield gain among all Aave assets
-            largest_yield_gain = max(
+            # Get top 3 by APY
+            top_3_by_apy = sorted(
                 aave_assets,
-                key=lambda x: float(x.get('apyPct1D', 0))
-            )
+                key=lambda x: float(x.get('apy', 0)),
+                reverse=True
+            )[:3]
             
             result = {
                 "timestamp": timestamp,
-                "largest_yield_gain": {
-                    "chain": largest_yield_gain.get('chain', ''),
-                    "project": largest_yield_gain.get('project', ''),
-                    "symbol": largest_yield_gain.get('symbol', ''),
-                    "yield_1d_change": float(largest_yield_gain.get('apyPct1D', 0)),
-                    "current_apy": float(largest_yield_gain.get('apy', 0))
-                }
+                "top_3_apy": [
+                    {
+                        "chain": asset.get('chain', ''),
+                        "project": asset.get('project', ''),
+                        "symbol": asset.get('symbol', ''),
+                        "apy": float(asset.get('apy', 0))
+                    }
+                    for asset in top_3_by_apy
+                ]
             }
             
             filepath = os.path.join(script_dir, f"pools_borrow_response_{timestamp}.json")
