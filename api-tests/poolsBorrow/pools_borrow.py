@@ -1,4 +1,3 @@
-from datetime import datetime
 import json
 import requests
 import os
@@ -6,7 +5,6 @@ import os
 def fetch_and_process_assets():
     # Get the directory where the script is located
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    curr_time = datetime.now().strftime("%Y-%m-%d")
     API_KEY = "egbJblmxMkXtjsN9coJzdADQ836i9OM__nhMPzveppsHELaKv8SrUQw"
     API_URL = "https://yields.llama.fi/poolsBorrow"
     
@@ -54,8 +52,7 @@ def fetch_and_process_assets():
             }
             
             # Create full file path in script directory
-            filename = f"pools_borrow_response-{curr_time}.json"
-            filepath = os.path.join(script_dir, filename)
+            filepath = os.path.join(script_dir, "pools_borrow_response.json")
             
             with open(filepath, "w") as f:
                 json.dump(result, f, indent=2)
@@ -68,8 +65,7 @@ def fetch_and_process_assets():
                 "error": "No data received from API",
                 "message": "Failed to process assets"
             }
-            filename = f"pools_borrow_response-{curr_time}-error.json"
-            filepath = os.path.join(script_dir, filename)
+            filepath = os.path.join(script_dir, "pools_borrow_response_error.json")
             with open(filepath, "w") as f:
                 json.dump(error_result, f, indent=2)
             return error_result
@@ -79,8 +75,7 @@ def fetch_and_process_assets():
             "error": str(e),
             "message": "Failed to fetch data from DeFi Llama API"
         }
-        filename = f"pools_borrow_response-{curr_time}-error.json"
-        filepath = os.path.join(script_dir, filename)
+        filepath = os.path.join(script_dir, "pools_borrow_response_error.json")
         with open(filepath, "w") as f:
             json.dump(error_result, f, indent=2)
         return error_result
@@ -89,8 +84,7 @@ def fetch_and_process_assets():
             "error": str(e),
             "message": "Failed to process assets"
         }
-        filename = f"pools_borrow_response-{curr_time}-error.json"
-        filepath = os.path.join(script_dir, filename)
+        filepath = os.path.join(script_dir, "pools_borrow_response_error.json")
         with open(filepath, "w") as f:
             json.dump(error_result, f, indent=2)
         return error_result

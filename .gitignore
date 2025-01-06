@@ -176,7 +176,7 @@ cython_debug/
 *~
 *.pyc
 *__pycache__
-*.json
+
 
 *.DS_Store
 dist/
