@@ -1,0 +1,5 @@
+{
+  "timestamp": "20250106_153932",
+  "error": "float() argument must be a string or a real number, not 'NoneType'",
+  "message": "Failed to process assets"
+}

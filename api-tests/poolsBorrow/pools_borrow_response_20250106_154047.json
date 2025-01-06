@@ -1,0 +1,10 @@
+{
+  "timestamp": "20250106_154047",
+  "largest_yield_gain": {
+    "chain": "zkSync Era",
+    "project": "aave-v3",
+    "symbol": "USDT",
+    "yield_1d_change": 9.60066,
+    "current_apy": 9.99961
+  }
+}

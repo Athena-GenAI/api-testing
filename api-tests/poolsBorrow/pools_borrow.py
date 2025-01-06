@@ -5,7 +5,7 @@ from datetime import datetime
 
 def fetch_and_process_assets():
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")  # Format: YYYYMMDD_HHMMSS
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     API_KEY = "egbJblmxMkXtjsN9coJzdADQ836i9OM__nhMPzveppsHELaKv8SrUQw"
     API_URL = "https://yields.llama.fi/poolsBorrow"
     
@@ -21,41 +21,41 @@ def fetch_and_process_assets():
         data = response.json()
         
         if "data" in data:
-            assets_list = data["data"]
+            # Filter for projects starting with 'aave-' and having valid apyPct1D values
+            aave_assets = [
+                asset for asset in data["data"]
+                if asset.get('project', '').lower().startswith('aave-') and 
+                   asset.get('apyPct1D') is not None
+            ]
             
-            # First get top 3 by APY
-            top_3_by_apy = sorted(
-                assets_list,
-                key=lambda x: float(x.get('apy', 0)),
-                reverse=True
-            )[:3]
+            if not aave_assets:
+                error_result = {
+                    "timestamp": timestamp,
+                    "error": "No valid Aave assets found",
+                    "message": "No assets from Aave with valid yield data were found"
+                }
+                filepath = os.path.join(script_dir, f"pools_borrow_response_error_{timestamp}.json")
+                with open(filepath, "w") as f:
+                    json.dump(error_result, f, indent=2)
+                return error_result
             
-            # Then find largest yield gain only among these top 3
+            # Find largest yield gain among all Aave assets
             largest_yield_gain = max(
-                top_3_by_apy,
-                key=lambda x: float(x.get('apyChange1d', 0))
+                aave_assets,
+                key=lambda x: float(x.get('apyPct1D', 0))
             )
             
             result = {
-                "timestamp": timestamp,  # Adding timestamp to the result data
-                "top_3_apy": [
-                    {
-                        "chain": asset.get('chain', ''),
-                        "project": asset.get('project', ''),
-                        "symbol": asset.get('symbol', ''),
-                        "apy": float(asset.get('apy', 0))
-                    }
-                    for asset in top_3_by_apy
-                ],
+                "timestamp": timestamp,
                 "largest_yield_gain": {
                     "chain": largest_yield_gain.get('chain', ''),
                     "project": largest_yield_gain.get('project', ''),
                     "symbol": largest_yield_gain.get('symbol', ''),
-                    "yield_1d_change": float(largest_yield_gain.get('apyChange1d', 0))
+                    "yield_1d_change": float(largest_yield_gain.get('apyPct1D', 0)),
+                    "current_apy": float(largest_yield_gain.get('apy', 0))
                 }
             }
             
-            # Add timestamp to filename
             filepath = os.path.join(script_dir, f"pools_borrow_response_{timestamp}.json")
             
             with open(filepath, "w") as f:
