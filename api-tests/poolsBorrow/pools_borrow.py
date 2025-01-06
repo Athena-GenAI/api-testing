@@ -10,7 +10,7 @@ def fetch_and_process_assets():
     API_URL = "https://yields.llama.fi/poolsBorrow"
     
     # Whitelist of desired symbols
-    desired_symbols = ('SCRVUSD', 'DOLA', 'GHO', 'USDC', 'USDT', 'WETH', 'WBTC', 'WSTETH', 'RETH', 'SFRXETH', 'SUSDE', 'USDE')
+    desired_symbols = ('SCRVUSD', 'DOLA', 'GHO', 'USDC', 'DAI', 'USDT', 'WETH', 'WBTC', 'WSTETH', 'RETH', 'SFRXETH', 'SUSDE', 'USDE')
     
     try:
         headers = {
