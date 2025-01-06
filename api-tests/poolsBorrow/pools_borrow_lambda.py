@@ -2,12 +2,17 @@ import json
 import requests
 
 def fetch_and_process_assets():
-
+    """
+    Fetches asset data from the DeFi Llama API, filters the assets based on a whitelist,
+    and returns the top 3 assets by APY from the Aave project.
+    
+    Returns:
+        dict: HTTP response containing the top 3 assets by APY or an error message.
+    """
     API_KEY = "egbJblmxMkXtjsN9coJzdADQ836i9OM__nhMPzveppsHELaKv8SrUQw"
     API_URL = "https://yields.llama.fi/poolsBorrow"
     
-    # Whitelist of desired symbols //
-    # @todo make sure this is correct
+    # Whitelist of desired symbols
     desired_symbols = ('ETH', 'WETH', 'WSTETH', 'WBTC', 'USDT', 'USDC', 'SUSDE', 'CBBTC', 'USDS', 'RETH', 'DAI', 'TBTC', 'USDE', 'CBETH', 'PYUSD', 'LUSD', 'SDAI', 'CRVUSD', 'GHO', 'FRAX', 'WETH.E', 'USDC.E', 'USDT.E', 'DAI.E', 'USBDC', 'SCRVUSD', 'DOLA', 'SFRXETH')
     
     try:
