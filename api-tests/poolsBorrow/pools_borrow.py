@@ -1,42 +1,40 @@
 from datetime import datetime
 import json
 import requests
+import os
 
 def fetch_and_process_assets():
+    # Get the directory where the script is located
+    script_dir = os.path.dirname(os.path.abspath(__file__))
     curr_time = datetime.now().strftime("%Y-%m-%d")
     API_KEY = "egbJblmxMkXtjsN9coJzdADQ836i9OM__nhMPzveppsHELaKv8SrUQw"
     API_URL = "https://yields.llama.fi/poolsBorrow"
     
     try:
-        # Make API call with authentication
         headers = {
             "Authorization": f"Bearer {API_KEY}",
             "Content-Type": "application/json"
         }
         
         response = requests.get(API_URL, headers=headers)
-        response.raise_for_status()  # Raise an exception for bad status codes
+        response.raise_for_status()
         
-        # Parse response data
         data = response.json()
         
         if "data" in data:
             assets_list = data["data"]
             
-            # Sort by APY and get top 3
             top_3_by_apy = sorted(
                 assets_list,
                 key=lambda x: float(x.get('apy', 0)),
                 reverse=True
             )[:3]
             
-            # Find asset with largest 1d yield gain
             largest_yield_gain = max(
                 assets_list,
-                key=lambda x: float(x.get('apyChange1d', 0))  # Using apyChange1d from DeFi Llama's API
+                key=lambda x: float(x.get('apyChange1d', 0))
             )
             
-            # Create result dictionary with only required fields
             result = {
                 "top_3_apy": [
                     {
@@ -55,28 +53,47 @@ def fetch_and_process_assets():
                 }
             }
             
-            # Save to file
-            with open(f"defi-llama-top-assets-{curr_time}.json", "w") as f:
+            # Create full file path in script directory
+            filename = f"pools_borrow_response-{curr_time}.json"
+            filepath = os.path.join(script_dir, filename)
+            
+            with open(filepath, "w") as f:
                 json.dump(result, f, indent=2)
             
+            print(f"Data successfully written to {filepath}")
             return result
             
         else:
-            return {
+            error_result = {
                 "error": "No data received from API",
                 "message": "Failed to process assets"
             }
+            filename = f"pools_borrow_response-{curr_time}-error.json"
+            filepath = os.path.join(script_dir, filename)
+            with open(filepath, "w") as f:
+                json.dump(error_result, f, indent=2)
+            return error_result
             
     except requests.exceptions.RequestException as e:
-        return {
+        error_result = {
             "error": str(e),
             "message": "Failed to fetch data from DeFi Llama API"
         }
+        filename = f"pools_borrow_response-{curr_time}-error.json"
+        filepath = os.path.join(script_dir, filename)
+        with open(filepath, "w") as f:
+            json.dump(error_result, f, indent=2)
+        return error_result
     except Exception as e:
-        return {
+        error_result = {
             "error": str(e),
             "message": "Failed to process assets"
         }
+        filename = f"pools_borrow_response-{curr_time}-error.json"
+        filepath = os.path.join(script_dir, filename)
+        with open(filepath, "w") as f:
+            json.dump(error_result, f, indent=2)
+        return error_result
 
 if __name__ == "__main__":
     result = fetch_and_process_assets()
