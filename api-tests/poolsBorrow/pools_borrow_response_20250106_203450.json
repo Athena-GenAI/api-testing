@@ -1,0 +1,23 @@
+{
+  "timestamp": "20250106_203450",
+  "top_3_apy": [
+    {
+      "chain": "Ethereum",
+      "project": "aave-v2",
+      "symbol": "USDT",
+      "apy": 16.09159
+    },
+    {
+      "chain": "Scroll",
+      "project": "aave-v3",
+      "symbol": "USDC",
+      "apy": 10.96085
+    },
+    {
+      "chain": "zkSync Era",
+      "project": "aave-v3",
+      "symbol": "USDT",
+      "apy": 9.87994
+    }
+  ]
+}
