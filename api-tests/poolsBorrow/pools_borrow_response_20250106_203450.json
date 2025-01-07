@@ -1,5 +1,4 @@
-{
-  "top_3_apy": [
+[
     {
       "chain": "Ethereum",
       "project": "aave-v2",
@@ -18,5 +17,5 @@
       "symbol": "USDT",
       "apy": 9.87994
     }
-  ]
-}
+  
+]
