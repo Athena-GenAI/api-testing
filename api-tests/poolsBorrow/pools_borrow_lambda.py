@@ -44,7 +44,7 @@ def fetch_and_process_assets():
                     "body": json.dumps({
                         "error": "No valid Aave assets found",
                         "message": "No whitelisted assets from Aave with valid yield data were found"
-                    }, ensure_ascii=False)
+                    })
                 }
             
             # Get top 3 by APY
@@ -68,7 +68,7 @@ def fetch_and_process_assets():
             
             return {
                 "statusCode": 200,
-                "body": json.dumps(result, ensure_ascii=False)
+                "body": json.dumps(result)
             }
             
         else:
@@ -77,7 +77,7 @@ def fetch_and_process_assets():
                 "body": json.dumps({
                     "error": "No data received from API",
                     "message": "Failed to process assets"
-                }, ensure_ascii=False)
+                })
             }
             
     except requests.exceptions.RequestException as e:
@@ -86,7 +86,7 @@ def fetch_and_process_assets():
             "body": json.dumps({
                 "error": str(e),
                 "message": "Failed to fetch data from DeFi Llama API"
-            }, ensure_ascii=False)
+            })
         }
         
     except Exception as e:
@@ -95,7 +95,7 @@ def fetch_and_process_assets():
             "body": json.dumps({
                 "error": str(e),
                 "message": "Failed to process assets"
-            }, ensure_ascii=False)
+            })
         }
 
 def lambda_handler(event, context):

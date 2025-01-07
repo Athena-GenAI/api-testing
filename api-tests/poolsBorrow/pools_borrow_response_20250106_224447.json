@@ -1,4 +1,4 @@
-{
+[
     {
       "chain": "Ethereum",
       "project": "aave-v3",
@@ -17,5 +17,4 @@
       "symbol": "USDT",
       "apy": 16.24131
     }
-  
-}
+]
