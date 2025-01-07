@@ -1,0 +1,23 @@
+{
+  "timestamp": "20250106_224319",
+  "top_3_apy": [
+    {
+      "chain": "Ethereum",
+      "project": "aave-v3",
+      "symbol": "CRVUSD",
+      "apy": 20.47076
+    },
+    {
+      "chain": "Scroll",
+      "project": "aave-v3",
+      "symbol": "USDC",
+      "apy": 17.02559
+    },
+    {
+      "chain": "Ethereum",
+      "project": "aave-v2",
+      "symbol": "USDT",
+      "apy": 16.24131
+    }
+  ]
+}
