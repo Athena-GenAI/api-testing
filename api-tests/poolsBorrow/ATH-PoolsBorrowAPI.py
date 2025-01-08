@@ -82,7 +82,6 @@ def main(pools_content_object, curr_time):
         # Try to see if we've already calculated and pull that
         pools_sorted_object = s3_client.get_object(Bucket='agent-data-miami', Key=f"athena/custom-calculations/pools-borrowed-data/borrowed-top-apy-{curr_time}.json")
         best_pools_sorted = pools_sorted_object["Body"].read().decode()
-        print('File already exists')
         if best_pools_sorted != {}:
             return best_pools_sorted
     except ClientError as ex: 

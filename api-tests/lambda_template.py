@@ -45,7 +45,6 @@ def main(<YOUR_DATATYPE>_content_object, curr_time):
         # Check if we've calculated - to skip the get_latest_<YOUR_DATATYPE> function - keep lambda cheap!!
         latest_<YOUR_DATATYPE> = s3_client.get_object(Bucket='agent-data-miami', Key=f"athena/custom-calculations/{datatype}-data/latest_{datatype}-{curr_time}.json")
         latest_<YOUR_DATATYPE> = latest_<YOUR_DATATYPE>["Body"].read().decode()
-        print('File already exists')
         if latest_<YOUR_DATATYPE> != {}:
             return latest_<YOUR_DATATYPE>
     except ClientError as ex: 
