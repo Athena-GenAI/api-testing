@@ -1,6 +1,6 @@
 import json
 import requests
-from token_whitelist import DESIRED_SYMBOLS  # Import the whitelist
+from constants.token_whitelist import DESIRED_SYMBOLS  # Updated import path
 
 
 def fetch_and_process_assets():
@@ -53,17 +53,18 @@ def fetch_and_process_assets():
             if not aave_assets:
                 return {
                     "statusCode": 404,
-                    "body": json.dumps({
-                        "error": "No valid Aave assets found",
-                        "message": "No whitelisted assets from Aave with valid yield data were found",
-                    }, ensure_ascii=False),
+                    "body": json.dumps(
+                        {
+                            "error": "No valid Aave assets found",
+                            "message": "No whitelisted assets from Aave with valid yield data were found",
+                        },
+                        ensure_ascii=False,
+                    ),
                 }
 
             # Sort by APY (descending) and take top 3
             top_3_by_apy = sorted(
-                aave_assets, 
-                key=lambda x: float(x.get("apy", 0)), 
-                reverse=True
+                aave_assets, key=lambda x: float(x.get("apy", 0)), reverse=True
             )[:3]
 
             # Format result with rounded APY values
@@ -72,15 +73,14 @@ def fetch_and_process_assets():
                     "chain": asset.get("chain", ""),
                     "project": asset.get("project", ""),
                     "symbol": asset.get("symbol", ""),
-                    "apy": round(float(asset.get("apy", 0)), 2),  # Round to 2 decimal places
+                    "apy": round(
+                        float(asset.get("apy", 0)), 2
+                    ),  # Round to 2 decimal places
                 }
                 for asset in top_3_by_apy
             ]
 
-            return {
-                "statusCode": 200,
-                "body": json.dumps(result, ensure_ascii=False)
-            }
+            return {"statusCode": 200, "body": json.dumps(result, ensure_ascii=False)}
 
         else:
             return {

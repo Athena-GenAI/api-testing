@@ -2,7 +2,7 @@ import json
 import requests
 import os
 from datetime import datetime
-from token_whitelist import DESIRED_SYMBOLS  # Import the whitelist
+from constants.token_whitelist import DESIRED_SYMBOLS
 
 
 def fetch_and_process_assets():
