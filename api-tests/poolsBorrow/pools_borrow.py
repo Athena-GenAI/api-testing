@@ -2,6 +2,7 @@ import json
 import requests
 import os
 from datetime import datetime
+from token_whitelist import DESIRED_SYMBOLS  # Import the whitelist
 
 
 def fetch_and_process_assets():
@@ -25,38 +26,6 @@ def fetch_and_process_assets():
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     API_KEY = "egbJblmxMkXtjsN9coJzdADQ836i9OM__nhMPzveppsHELaKv8SrUQw"
     API_URL = "https://yields.llama.fi/poolsBorrow"
-
-    # Updated whitelist of desired symbols without '$'
-    desired_symbols = (
-        "ETH",
-        "WETH",
-        "WSTETH",
-        "WBTC",
-        "USDT",
-        "USDC",
-        "SUSDE",
-        "CBBTC",
-        "USDS",
-        "RETH",
-        "DAI",
-        "TBTC",
-        "USDE",
-        "CBETH",
-        "PYUSD",
-        "LUSD",
-        "SDAI",
-        "CRVUSD",
-        "GHO",
-        "FRAX",
-        "WETH.E",
-        "USDC.E",
-        "USDT.E",
-        "DAI.E",
-        "USBDC",
-        "SCRVUSD",
-        "DOLA",
-        "SFRXETH",
-    )
 
     try:
         # Set up request headers with API key and content type
@@ -82,7 +51,7 @@ def fetch_and_process_assets():
                 for asset in data["data"]
                 if asset.get("project", "").lower().startswith("aave-")
                 and asset.get("apy") is not None
-                and asset.get("symbol", "").upper() in desired_symbols
+                and asset.get("symbol", "").upper() in DESIRED_SYMBOLS
             ]
 
             # Handle case where no valid assets found

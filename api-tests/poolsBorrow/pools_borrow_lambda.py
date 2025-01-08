@@ -1,5 +1,6 @@
 import json
 import requests
+from token_whitelist import DESIRED_SYMBOLS  # Import the whitelist
 
 
 def fetch_and_process_assets():
@@ -25,39 +26,6 @@ def fetch_and_process_assets():
     API_KEY = "egbJblmxMkXtjsN9coJzdADQ836i9OM__nhMPzveppsHELaKv8SrUQw"
     API_URL = "https://yields.llama.fi/poolsBorrow"
 
-    # Whitelist of supported tokens across various chains
-    # Includes both native tokens and their wrapped versions
-    desired_symbols = (
-        "ETH",
-        "WETH",
-        "WSTETH",
-        "WBTC",
-        "USDT",
-        "USDC",
-        "SUSDE",
-        "CBBTC",
-        "USDS",
-        "RETH",
-        "DAI",
-        "TBTC",
-        "USDE",
-        "CBETH",
-        "PYUSD",
-        "LUSD",
-        "SDAI",
-        "CRVUSD",
-        "GHO",
-        "FRAX",
-        "WETH.E",
-        "USDC.E",
-        "USDT.E",
-        "DAI.E",
-        "USBDC",
-        "SCRVUSD",
-        "DOLA",
-        "SFRXETH",
-    )
-
     try:
         # Set up request headers for API authentication
         headers = {
@@ -78,7 +46,7 @@ def fetch_and_process_assets():
                 for asset in data["data"]
                 if asset.get("project", "").lower().startswith("aave-")
                 and asset.get("apy") is not None
-                and asset.get("symbol", "").upper() in desired_symbols
+                and asset.get("symbol", "").upper() in DESIRED_SYMBOLS
             ]
 
             # Return 404 if no valid assets found

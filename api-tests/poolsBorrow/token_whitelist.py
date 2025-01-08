@@ -68,4 +68,4 @@ DESIRED_SYMBOLS = (
     
     # Other Variants
     "USBDC",
-) 
+)
