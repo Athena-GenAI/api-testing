@@ -22,7 +22,7 @@ Placeholder for revised details from @Zyxeos README file
 
 * **Athena.ai:** https://athena.ai/
 
-** API Documentation **
+**API Documentation**
 * **Defillama API Documentation:** https://defillama.com/](https://defillama.com/docs/api
 * **Messari.io API Documentation:** https://docs.messari.io/reference/events-1
 
