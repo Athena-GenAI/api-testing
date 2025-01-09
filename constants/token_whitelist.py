@@ -1,8 +1,7 @@
 """
 Token Whitelist Configuration
 
-This module contains the whitelist of supported tokens for the DeFi Llama API integration.
-The whitelist is used to filter asset data returned from the pools/borrow endpoint.
+This module contains the whitelist of supported tokens.
 
 Categories:
 - Native tokens (ETH, BTC)
