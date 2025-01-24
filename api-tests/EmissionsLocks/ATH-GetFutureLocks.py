@@ -2,9 +2,9 @@ import requests
 import boto3
 import json
 import math
-import json
 import time 
 import datetime
+
 from botocore.exceptions import ClientError
 
 EPOCH_DAY = 86400 
@@ -25,9 +25,10 @@ def get_latest_emissions(data):
     list_emissions = []
     for i in data:
         curr_coin_price = 0
-        if 'mcap' in i.keys():
+        if 'mcap' in i.keys() and 'events' in i.keys():
             current_coin_price = i['mcap']/i['circSupply']
             for x in i['events']:
+                print(x)
                 unlock_timestamp = float(x['timestamp'])
                 if current_epoch < unlock_timestamp and current_epoch + EPOCH_MONTH > unlock_timestamp:
                     tok_amount = 0
@@ -91,7 +92,8 @@ def main(emissions_content_object, curr_time):
         if ex.response['Error']['Code'] == 'NoSuchKey': # means we have not calculated today yet
             print('No object found - please debug handler function!')
             emissions_defi_output = emissions_content_object["Body"].read().decode()
-            latest_emissions = get_latest_emissions(json.loads(emissions_defi_output))
+            emissions_response_file = json.loads(emissions_defi_output)
+            latest_emissions = get_latest_emissions(emissions_response_file)
             if latest_emissions != []:
                 s3_client.put_object(Body=json.dumps(latest_emissions), Bucket='agent-data-miami', Key=f"athena/custom-calculations/emissions-data/latest_emissions-{curr_time}.json")
             return latest_emissions
