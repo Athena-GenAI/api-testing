@@ -18,29 +18,27 @@ COPIN_API_BASE = "https://api.copin.io"
 
 def fetch_smart_money_data(curr_time):
     """
-    Fetch smart money position data from Copin API and combine into a single file
+    Fetch smart money position data from Copin API
     
     params:
     curr_time - used to create a unique filename based on date
     """
     successful_combinations = []
-    all_positions = []
+    token_stats = {}
     
     for trader_id in TRADER_WALLETS:
-        trader_positions = []
         for protocol in SUPPORTED_PROTOCOLS:
             try:
                 url = f"{COPIN_API_BASE}/{protocol}/position/opening/{trader_id}"
                 response = requests.get(url, timeout=10)
                 response.raise_for_status()
                 
-                positions = response.json()
-                # Add trader and protocol info to each position
-                for position in positions:
-                    position['trader_id'] = trader_id
-                    position['protocol'] = protocol
-                
-                trader_positions.extend(positions)
+                # Store raw data
+                s3_client.put_object(
+                    Body=response.text,
+                    Bucket='agent-data-miami',
+                    Key=f"athena/copin/smart-money-data/raw/{protocol}_{trader_id}_{curr_time}.json"
+                )
                 
                 successful_combinations.append({
                     "trader_id": trader_id,
@@ -51,17 +49,6 @@ def fetch_smart_money_data(curr_time):
             except Exception as e:
                 logger.warning(f"Failed to fetch data for {trader_id} on {protocol}: {e}")
                 continue
-        
-        if trader_positions:
-            all_positions.extend(trader_positions)
-    
-    # Store all positions in a single file
-    if all_positions:
-        s3_client.put_object(
-            Body=json.dumps(all_positions),
-            Bucket='agent-data-miami',
-            Key=f"athena/copin/smart-money-data/positions_{curr_time}.json"
-        )
     
     # Store successful combinations
     if successful_combinations:
@@ -73,8 +60,6 @@ def fetch_smart_money_data(curr_time):
             Bucket='agent-data-miami',
             Key=f"athena/copin/smart-money-data/combinations/successful_combinations_{curr_time}.json"
         )
-    
-    return all_positions
 
 def get_latest_smart_money(data):
     """Process position data and calculate statistics
@@ -82,16 +67,14 @@ def get_latest_smart_money(data):
     Args:
         data: JSON data containing position information
     Returns:
-        dict: Processed statistics and position information with tokens as keys,
-              sorted by percentage (for tokens with >= 5 positions) with BTC, ETH, SOL prioritized
+        dict: Processed statistics and position information with tokens as keys
     """
     token_stats = {}
-    MIN_POSITIONS = 5
     
     # Process positions
     for position in data:
         token = position.get('indexToken', '')
-        cleaned_token = token if token.startswith('0x') else f"{token.lstrip('$').split('-')[-1]}"
+        cleaned_token = token if token.startswith('0x') else f"${token.lstrip('$').split('-')[-1]}"
         
         if cleaned_token not in token_stats:
             token_stats[cleaned_token] = {"long": 0, "short": 0}
@@ -100,7 +83,7 @@ def get_latest_smart_money(data):
     
     # Format results
     formatted_result = {}
-    priority_tokens = ['BTC', 'ETH', 'SOL']
+    priority_tokens = ['$BTC', '$ETH', '$SOL']
     
     # Process all tokens
     for token, stats in token_stats.items():
@@ -123,45 +106,30 @@ def get_latest_smart_money(data):
                 majority_percentage = 50.0
 
             formatted_result[token] = {
-                'token': ''.join(('$', token)),
                 'total_positions': total_positions,
                 'percentage': f"{round(majority_percentage, 1)}%",
-                'position': f"{round(majority_percentage, 1)}% {majority_position}",
-                'raw_percentage': majority_percentage,  # Used for sorting
-                'is_valid': total_positions >= MIN_POSITIONS  # Flag for filtering
+                'position': f"{majority_position} {round(majority_percentage, 1)}%"
             }
     
     # Create ordered result with priority tokens first
     ordered_result = {}
     
-    # Add priority tokens first if they exist, maintaining their order
+    # Add priority tokens first if they exist
     for token in priority_tokens:
         if token in formatted_result:
-            ordered_data = formatted_result[token].copy()
-            del ordered_data['raw_percentage']  # Remove sorting fields from output
-            del ordered_data['is_valid']
-            ordered_result[token] = ordered_data
+            ordered_result[token] = formatted_result[token]
             del formatted_result[token]
     
-    # Sort remaining tokens by percentage (only for tokens with >= MIN_POSITIONS)
-    sorted_tokens = sorted(
-        formatted_result.items(),
-        key=lambda x: (
-            x[1]['is_valid'],  # Valid positions (>= 5) come first
-            x[1]['raw_percentage'] if x[1]['is_valid'] else 0,  # Then sort by percentage
-            x[1]['total_positions']  # For equal percentages, more positions = higher rank
-        ),
-        reverse=True
-    )
-    
-    # Add sorted tokens to ordered result
-    for token, data in sorted_tokens:
-        clean_data = data.copy()
-        del clean_data['raw_percentage']  # Remove sorting fields from output
-        del clean_data['is_valid']
-        ordered_result[token] = clean_data
+    # Add remaining tokens in alphabetical order
+    for token in sorted(formatted_result.keys()):
+        ordered_result[token] = formatted_result[token]
     
     return json.dumps(ordered_result, indent=2)
+
+def sort_here_smart_money(data):
+    """Sort smart money data if needed"""
+    # Currently using sorting in get_latest_smart_money
+    pass
 
 def main(smart_money_content_object, curr_time):
     try:
@@ -180,7 +148,7 @@ def main(smart_money_content_object, curr_time):
             smart_money_output = smart_money_content_object["Body"].read().decode()
             latest_smart_money = get_latest_smart_money(json.loads(smart_money_output))
             
-            if latest_smart_money != "{}":
+            if latest_smart_money != "[]":
                 s3_client.put_object(
                     Body=latest_smart_money,
                     Bucket='agent-data-miami',
@@ -188,44 +156,48 @@ def main(smart_money_content_object, curr_time):
                 )
             return latest_smart_money
 
-def get_batch_timestamp():
-    """Generate an hourly timestamp string for batch processing.
-    
-    Creates a formatted timestamp used for naming batch files and tracking data age.
-    
-    Returns:
-        str: Timestamp in format YYYYMMDD_HH format
-    """
-    return datetime.datetime.now().strftime("%Y%m%d_%H")
-
 def lambda_handler(event, context):
     latest_smart_money = {}
-    curr_time = get_batch_timestamp()
+    curr_time = datetime.datetime.now().strftime("%Y-%m-%d")
     
     try:
         smart_money_output = s3_client.get_object(
             Bucket='agent-data-miami',
-            Key=f"athena/copin/smart-money-data/positions_{curr_time}.json"
+            Key=f"athena/copin/smart-money-data/raw/combined_{curr_time}.json"
         )
         latest_smart_money = main(smart_money_output, curr_time)
         
     except ClientError as ex:
         if ex.response['Error']['Code'] == 'NoSuchKey':
             logger.info('No data found - fetching new data')
-            all_positions = fetch_smart_money_data(curr_time)
+            fetch_smart_money_data(curr_time)
             
-            if all_positions:
-                latest_smart_money = get_latest_smart_money(all_positions)
-                
-                # Store the processed results
-                if latest_smart_money != "{}":
-                    s3_client.put_object(
-                        Body=latest_smart_money,
-                        Bucket='agent-data-miami',
-                        Key=f"athena/custom-calculations/smart-money-data/latest_smart_money-{curr_time}.json"
-                    )
-            else:
-                latest_smart_money = "{}"
+            # Combine all protocol data for this timestamp
+            all_positions = []
+            for trader_id in TRADER_WALLETS:
+                for protocol in SUPPORTED_PROTOCOLS:
+                    try:
+                        data = s3_client.get_object(
+                            Bucket='agent-data-miami',
+                            Key=f"athena/copin/smart-money-data/raw/{protocol}_{trader_id}_{curr_time}.json"
+                        )
+                        positions = json.loads(data["Body"].read().decode())
+                        all_positions.extend(positions)
+                    except ClientError:
+                        continue
+            
+            # Store combined data
+            s3_client.put_object(
+                Body=json.dumps(all_positions),
+                Bucket='agent-data-miami',
+                Key=f"athena/copin/smart-money-data/raw/combined_{curr_time}.json"
+            )
+            
+            smart_money_output = s3_client.get_object(
+                Bucket='agent-data-miami',
+                Key=f"athena/copin/smart-money-data/raw/combined_{curr_time}.json"
+            )
+            latest_smart_money = main(smart_money_output, curr_time)
         else:
             logger.error('Unexpected error: %s' % ex)
             raise
