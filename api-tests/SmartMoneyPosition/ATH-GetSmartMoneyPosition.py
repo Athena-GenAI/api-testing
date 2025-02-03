@@ -82,33 +82,31 @@ def get_latest_smart_money(data):
     Args:
         data: JSON data containing position information
     Returns:
-        dict: Processed statistics and position information
+        dict: Processed statistics and position information with tokens as keys,
+              sorted by percentage (for tokens with >= 5 positions) with BTC, ETH, SOL prioritized
     """
     token_stats = {}
+    MIN_POSITIONS = 5
     
     # Process positions
     for position in data:
         token = position.get('indexToken', '')
-        cleaned_token = token if token.startswith('0x') else f"${token.lstrip('$').split('-')[-1]}"
+        cleaned_token = token if token.startswith('0x') else f"{token.lstrip('$').split('-')[-1]}"
         
         if cleaned_token not in token_stats:
-            token_stats[cleaned_token] = {
-                "long": 0, 
-                "short": 0,
-                "traders": set()  # Track unique traders
-            }
+            token_stats[cleaned_token] = {"long": 0, "short": 0}
         
-        stats = token_stats[cleaned_token]
-        stats["long" if position.get('isLong') else "short"] += 1
-        stats["traders"].add(position.get('trader_id'))
+        token_stats[cleaned_token]["long" if position.get('isLong') else "short"] += 1
     
     # Format results
-    formatted_tokens = []
+    formatted_result = {}
+    priority_tokens = ['BTC', 'ETH', 'SOL']
+    
+    # Process all tokens
     for token, stats in token_stats.items():
         long_count = stats.get('long', 0)
         short_count = stats.get('short', 0)
         total_positions = long_count + short_count
-        unique_traders = len(stats["traders"])
         
         if total_positions > 0:
             long_percentage = (long_count / total_positions) * 100
@@ -124,17 +122,45 @@ def get_latest_smart_money(data):
                 majority_position = "NEUTRAL"
                 majority_percentage = 50.0
 
-            formatted_tokens.append({
-                'token': token,
+            formatted_result[token] = {
                 'total_positions': total_positions,
-                'unique_traders': unique_traders,
                 'percentage': f"{round(majority_percentage, 1)}%",
                 'position': f"{majority_position} {round(majority_percentage, 1)}%",
-                'long_count': long_count,
-                'short_count': short_count
-            })
+                'raw_percentage': majority_percentage,  # Used for sorting
+                'is_valid': total_positions >= MIN_POSITIONS  # Flag for filtering
+            }
     
-    return json.dumps(sorted(formatted_tokens, key=lambda x: x['total_positions'], reverse=True))
+    # Create ordered result with priority tokens first
+    ordered_result = {}
+    
+    # Add priority tokens first if they exist, maintaining their order
+    for token in priority_tokens:
+        if token in formatted_result:
+            ordered_data = formatted_result[token].copy()
+            del ordered_data['raw_percentage']  # Remove sorting fields from output
+            del ordered_data['is_valid']
+            ordered_result[token] = ordered_data
+            del formatted_result[token]
+    
+    # Sort remaining tokens by percentage (only for tokens with >= MIN_POSITIONS)
+    sorted_tokens = sorted(
+        formatted_result.items(),
+        key=lambda x: (
+            x[1]['is_valid'],  # Valid positions (>= 5) come first
+            x[1]['raw_percentage'] if x[1]['is_valid'] else 0,  # Then sort by percentage
+            x[1]['total_positions']  # For equal percentages, more positions = higher rank
+        ),
+        reverse=True
+    )
+    
+    # Add sorted tokens to ordered result
+    for token, data in sorted_tokens:
+        clean_data = data.copy()
+        del clean_data['raw_percentage']  # Remove sorting fields from output
+        del clean_data['is_valid']
+        ordered_result[token] = clean_data
+    
+    return json.dumps(ordered_result, indent=2)
 
 def main(smart_money_content_object, curr_time):
     try:
@@ -153,7 +179,7 @@ def main(smart_money_content_object, curr_time):
             smart_money_output = smart_money_content_object["Body"].read().decode()
             latest_smart_money = get_latest_smart_money(json.loads(smart_money_output))
             
-            if latest_smart_money != "[]":
+            if latest_smart_money != "{}":
                 s3_client.put_object(
                     Body=latest_smart_money,
                     Bucket='agent-data-miami',
@@ -191,14 +217,14 @@ def lambda_handler(event, context):
                 latest_smart_money = get_latest_smart_money(all_positions)
                 
                 # Store the processed results
-                if latest_smart_money != "[]":
+                if latest_smart_money != "{}":
                     s3_client.put_object(
                         Body=latest_smart_money,
                         Bucket='agent-data-miami',
                         Key=f"athena/custom-calculations/smart-money-data/latest_smart_money-{curr_time}.json"
                     )
             else:
-                latest_smart_money = "[]"
+                latest_smart_money = "{}"
         else:
             logger.error('Unexpected error: %s' % ex)
             raise
