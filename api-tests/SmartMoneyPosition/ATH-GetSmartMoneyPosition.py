@@ -1,3 +1,24 @@
+"""
+Smart Money Position Tracker
+
+This module tracks and analyzes trading positions of significant traders ("smart money") across different protocols.
+It fetches position data from the Copin API, processes it, and stores both raw and analyzed data in S3.
+
+Key Features:
+- Fetches trading positions from multiple trader wallets across supported protocols
+- Analyzes position data to determine market sentiment (LONG/SHORT) for different tokens
+- Prioritizes major cryptocurrencies (BTC, ETH, SOL) in the analysis
+- Implements hourly batch processing with AWS Lambda
+- Stores both raw position data and processed analytics in S3
+
+Dependencies:
+- boto3: AWS SDK for Python
+- requests: HTTP library for API calls
+- json: JSON processing
+- logging: Logging functionality
+- datetime: Date and time handling
+"""
+
 import requests
 import boto3
 import json
@@ -18,10 +39,24 @@ COPIN_API_BASE = "https://api.copin.io"
 
 def fetch_smart_money_data(curr_time):
     """
-    Fetch smart money position data from Copin API and combine into a single file
+    Fetch smart money position data from Copin API and combine into a single file.
     
-    params:
-    curr_time - used to create a unique filename based on date
+    This function:
+    1. Iterates through predefined trader wallets and protocols
+    2. Fetches current positions for each trader-protocol combination
+    3. Stores raw position data and successful API calls in S3
+    
+    Args:
+        curr_time (str): Current timestamp in YYYYMMDD_HH format for file naming
+    
+    Returns:
+        list: Combined list of all trading positions with trader and protocol information
+        
+    Note:
+        - Failed API calls are logged but don't stop the process
+        - Data is stored in two S3 files:
+          1. positions_{curr_time}.json: Raw position data
+          2. successful_combinations_{curr_time}.json: Successful API calls
     """
     successful_combinations = []
     all_positions = []
@@ -77,13 +112,33 @@ def fetch_smart_money_data(curr_time):
     return all_positions
 
 def get_latest_smart_money(data):
-    """Process position data and calculate statistics
+    """
+    Process position data and calculate trading sentiment statistics.
+    
+    This function:
+    1. Aggregates positions by token
+    2. Calculates LONG vs SHORT percentages
+    3. Determines majority position and its percentage
+    4. Prioritizes BTC, ETH, SOL in the output
+    5. Filters and sorts other tokens based on position count and percentage
     
     Args:
-        data: JSON data containing position information
+        data (list): JSON data containing position information
+        
     Returns:
-        dict: Processed statistics and position information with tokens as keys,
-              sorted by percentage (for tokens with >= 5 positions) with BTC, ETH, SOL prioritized
+        str: JSON string containing processed statistics with tokens as keys,
+             sorted by percentage (for tokens with >= 5 positions) with BTC, ETH, SOL prioritized
+             
+    Format of returned data:
+        {
+            "TOKEN": {
+                "token": "$TOKEN",
+                "total_positions": int,
+                "percentage": "XX.X%",
+                "position": "XX.X% LONG/SHORT/NEUTRAL"
+            },
+            ...
+        }
     """
     token_stats = {}
     MIN_POSITIONS = 5
@@ -164,6 +219,23 @@ def get_latest_smart_money(data):
     return json.dumps(ordered_result, indent=2)
 
 def main(smart_money_content_object, curr_time):
+    """
+    Main processing function that handles the retrieval and calculation of smart money positions.
+    
+    This function:
+    1. Checks for existing calculations for the current timestamp
+    2. If none exist, processes new data and stores results
+    
+    Args:
+        smart_money_content_object (dict): S3 object containing raw position data
+        curr_time (str): Current timestamp in YYYYMMDD_HH format
+        
+    Returns:
+        str: JSON string containing processed smart money positions
+        
+    Note:
+        Results are cached in S3 to prevent redundant calculations
+    """
     try:
         # Check if we've already calculated for this timestamp
         latest_smart_money = s3_client.get_object(
@@ -189,16 +261,42 @@ def main(smart_money_content_object, curr_time):
             return latest_smart_money
 
 def get_batch_timestamp():
-    """Generate an hourly timestamp string for batch processing.
+    """
+    Generate an hourly timestamp string for batch processing.
     
-    Creates a formatted timestamp used for naming batch files and tracking data age.
+    This function:
+    1. Gets current datetime
+    2. Formats it to YYYYMMDD_HH for consistent file naming
     
     Returns:
-        str: Timestamp in format YYYYMMDD_HH format
+        str: Timestamp in YYYYMMDD_HH format (e.g., "20250205_23")
     """
     return datetime.datetime.now().strftime("%Y%m%d_%H")
 
 def lambda_handler(event, context):
+    """
+    AWS Lambda handler function that orchestrates the smart money position tracking process.
+    
+    This function:
+    1. Attempts to retrieve existing processed data for the current hour
+    2. If not found, triggers new data collection and processing
+    3. Stores results in S3 and returns them in the API response
+    
+    Args:
+        event (dict): AWS Lambda event object
+        context (object): AWS Lambda context object
+        
+    Returns:
+        dict: API Gateway response containing:
+            - statusCode: HTTP status code (200 for success)
+            - headers: Response headers with Content-Type
+            - body: JSON string containing processed smart money positions
+            
+    Error Handling:
+        - Logs and handles missing data gracefully
+        - Returns empty JSON if no data is available
+        - Raises unexpected errors for AWS Lambda retry
+    """
     latest_smart_money = {}
     curr_time = get_batch_timestamp()
     
