@@ -1,0 +1,95 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+
+Description: Smart Money Position Tracker Infrastructure
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - prod
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 256
+    Runtime: python3.9
+    Environment:
+      Variables:
+        BUCKET_NAME: !Sub agent-data-miami-${Environment}
+
+Resources:
+  # S3 Bucket for storing data
+  SmartMoneyBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub agent-data-miami-${Environment}
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldData
+            Status: Enabled
+            ExpirationInDays: 7
+
+  # IAM Role for Lambda functions
+  LambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: S3Access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:GetObject
+                Resource: !Sub ${SmartMoneyBucket.Arn}/*
+
+  # Lambda function for caching data
+  CacheSmartMoneyFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: cache_smart_money.lambda_handler
+      Role: !GetAtt LambdaRole.Arn
+      Events:
+        ScheduleEvent:
+          Type: Schedule
+          Properties:
+            Schedule: rate(2 hours)
+            Name: SmartMoneyCacheSchedule
+            Description: Runs every 2 hours to cache smart money positions
+            Enabled: true
+
+  # Lambda function for serving cached data
+  GetCachedPositionsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: get_cached_positions.lambda_handler
+      Role: !GetAtt LambdaRole.Arn
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /positions
+            Method: get
+
+Outputs:
+  ApiEndpoint:
+    Description: API Gateway endpoint URL
+    Value: !Sub https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/positions
+  BucketName:
+    Description: Name of the S3 bucket
+    Value: !Ref SmartMoneyBucket

@@ -119,29 +119,18 @@ def get_latest_smart_money(data):
     1. Aggregates positions by token
     2. Calculates LONG vs SHORT percentages
     3. Determines majority position and its percentage
-    4. Prioritizes BTC, ETH, SOL in the output
-    5. Filters and sorts other tokens based on position count and percentage
+    4. Returns top 6 positions (BTC, ETH, SOL + top 3 by percentage)
     
     Args:
         data (list): JSON data containing position information
         
     Returns:
-        str: JSON string containing processed statistics with tokens as keys,
-             sorted by percentage (for tokens with >= 5 positions) with BTC, ETH, SOL prioritized
-             
-    Format of returned data:
-        {
-            "TOKEN": {
-                "token": "$TOKEN",
-                "total_positions": int,
-                "percentage": "XX.X%",
-                "position": "XX.X% LONG/SHORT/NEUTRAL"
-            },
-            ...
-        }
+        str: JSON string containing array of processed statistics,
+             prioritizing BTC, ETH, SOL and top 3 positions by percentage
     """
     token_stats = {}
     MIN_POSITIONS = 5
+    priority_tokens = ['BTC', 'ETH', 'SOL']
     
     # Process positions
     for position in data:
@@ -154,8 +143,8 @@ def get_latest_smart_money(data):
         token_stats[cleaned_token]["long" if position.get('isLong') else "short"] += 1
     
     # Format results
-    formatted_result = {}
-    priority_tokens = ['BTC', 'ETH', 'SOL']
+    formatted_results = []
+    remaining_positions = []
     
     # Process all tokens
     for token, stats in token_stats.items():
@@ -163,7 +152,7 @@ def get_latest_smart_money(data):
         short_count = stats.get('short', 0)
         total_positions = long_count + short_count
         
-        if total_positions > 0:
+        if total_positions >= MIN_POSITIONS:
             long_percentage = (long_count / total_positions) * 100
             short_percentage = (short_count / total_positions) * 100
             
@@ -177,46 +166,29 @@ def get_latest_smart_money(data):
                 majority_position = "NEUTRAL"
                 majority_percentage = 50.0
 
-            formatted_result[token] = {
-                'token': ''.join(('$', token)),
+            position_data = {
+                'token': f"${token}",
                 'total_positions': total_positions,
                 'percentage': f"{round(majority_percentage, 1)}%",
                 'position': f"{round(majority_percentage, 1)}% {majority_position}",
-                'raw_percentage': majority_percentage,  # Used for sorting
-                'is_valid': total_positions >= MIN_POSITIONS  # Flag for filtering
+                'raw_percentage': majority_percentage
             }
+            
+            # Add priority tokens directly to results
+            if token in priority_tokens:
+                formatted_results.append(position_data)
+            else:
+                remaining_positions.append(position_data)
     
-    # Create ordered result with priority tokens first
-    ordered_result = {}
+    # Sort remaining positions by percentage and add top 3
+    remaining_positions.sort(key=lambda x: (x['raw_percentage'], x['total_positions']), reverse=True)
+    formatted_results.extend(remaining_positions[:3])
     
-    # Add priority tokens first if they exist, maintaining their order
-    for token in priority_tokens:
-        if token in formatted_result:
-            ordered_data = formatted_result[token].copy()
-            del ordered_data['raw_percentage']  # Remove sorting fields from output
-            del ordered_data['is_valid']
-            ordered_result[token] = ordered_data
-            del formatted_result[token]
+    # Remove sorting field from final output
+    for item in formatted_results:
+        del item['raw_percentage']
     
-    # Sort remaining tokens by percentage (only for tokens with >= MIN_POSITIONS)
-    sorted_tokens = sorted(
-        formatted_result.items(),
-        key=lambda x: (
-            x[1]['is_valid'],  # Valid positions (>= 5) come first
-            x[1]['raw_percentage'] if x[1]['is_valid'] else 0,  # Then sort by percentage
-            x[1]['total_positions']  # For equal percentages, more positions = higher rank
-        ),
-        reverse=True
-    )
-    
-    # Add sorted tokens to ordered result
-    for token, data in sorted_tokens:
-        clean_data = data.copy()
-        del clean_data['raw_percentage']  # Remove sorting fields from output
-        del clean_data['is_valid']
-        ordered_result[token] = clean_data
-    
-    return json.dumps(ordered_result, indent=2)
+    return json.dumps(formatted_results, indent=2)
 
 def main(smart_money_content_object, curr_time):
     """
@@ -243,7 +215,7 @@ def main(smart_money_content_object, curr_time):
             Key=f"athena/custom-calculations/smart-money-data/latest_smart_money-{curr_time}.json"
         )
         latest_smart_money = latest_smart_money["Body"].read().decode()
-        if latest_smart_money != {}:
+        if latest_smart_money != "[]":
             return latest_smart_money
             
     except ClientError as ex:
@@ -252,7 +224,7 @@ def main(smart_money_content_object, curr_time):
             smart_money_output = smart_money_content_object["Body"].read().decode()
             latest_smart_money = get_latest_smart_money(json.loads(smart_money_output))
             
-            if latest_smart_money != "{}":
+            if latest_smart_money != "[]":
                 s3_client.put_object(
                     Body=latest_smart_money,
                     Bucket='agent-data-miami',
@@ -276,28 +248,9 @@ def get_batch_timestamp():
 def lambda_handler(event, context):
     """
     AWS Lambda handler function that orchestrates the smart money position tracking process.
-    
-    This function:
-    1. Attempts to retrieve existing processed data for the current hour
-    2. If not found, triggers new data collection and processing
-    3. Stores results in S3 and returns them in the API response
-    
-    Args:
-        event (dict): AWS Lambda event object
-        context (object): AWS Lambda context object
-        
-    Returns:
-        dict: API Gateway response containing:
-            - statusCode: HTTP status code (200 for success)
-            - headers: Response headers with Content-Type
-            - body: JSON string containing processed smart money positions
-            
-    Error Handling:
-        - Logs and handles missing data gracefully
-        - Returns empty JSON if no data is available
-        - Raises unexpected errors for AWS Lambda retry
+    Now returns an array of positions instead of an object, focusing on top 6 positions.
     """
-    latest_smart_money = {}
+    latest_smart_money = "[]"  # Default to empty array instead of empty object
     curr_time = get_batch_timestamp()
     
     try:
@@ -316,26 +269,22 @@ def lambda_handler(event, context):
                 latest_smart_money = get_latest_smart_money(all_positions)
                 
                 # Store the processed results
-                if latest_smart_money != "{}":
+                if latest_smart_money != "[]":
                     s3_client.put_object(
                         Body=latest_smart_money,
                         Bucket='agent-data-miami',
                         Key=f"athena/custom-calculations/smart-money-data/latest_smart_money-{curr_time}.json"
                     )
             else:
-                latest_smart_money = "{}"
+                latest_smart_money = "[]"
         else:
             logger.error('Unexpected error: %s' % ex)
             raise
 
-    # Format response
-    body = json.loads(latest_smart_money)
-    body = json.dumps(body, indent=2)
-    
     return {
         'statusCode': 200,
         "headers": {
             "Content-Type": "application/json"
         },
-        'body': body
+        'body': latest_smart_money
     }
