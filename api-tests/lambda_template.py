@@ -13,10 +13,10 @@ API_KEY = 'egbJblmxMkXtjsN9coJzdADQ836i9OM__nhMPzveppsHELaKv8SrUQ'
 API_URL = f"https://pro-api.llama.fi/{API_KEY}/api/emissions"
 
 def fetch_<YOUR_DATATYPE>_data(curr_time):
-"""
-params:
-curr_time - used to create a unique filename based on date 
-"""
+    """
+    params:
+        curr_time - used to create a unique filename based on date 
+    """
     datatype = <YOUR_DATATYPE>
     if DEFILLAMA_PRO:
         response = requests.get(API_URL)

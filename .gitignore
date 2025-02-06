@@ -209,6 +209,12 @@ dist/
 .cmake/
 
 
-# Cursor config
+# Cursor
 .cursorconfig
-*.cursor
+.cursor
+._cursor
+.__pycache__/cursor
+.__pycache__/._cursor
+.__pycache__/cursor/__pycache__
+.__pycache__/._cursor/__pycache__
+/__pycache__//\

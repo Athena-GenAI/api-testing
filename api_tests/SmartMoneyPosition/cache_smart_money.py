@@ -12,7 +12,7 @@ import logging
 from datetime import datetime, timedelta
 import boto3
 from botocore.exceptions import ClientError
-from ATH_GetSmartMoneyPosition import fetch_smart_money_data, get_latest_smart_money
+from ath_get_smart_money_position import fetch_smart_money_data
 
 # Configure logging
 logger = logging.getLogger()
@@ -39,55 +39,59 @@ def cache_smart_money_positions(bucket_name):
     Returns:
         bool: True if caching was successful, False otherwise
     """
-    curr_time = get_cache_timestamp()
-    
     try:
-        # Fetch new position data
-        all_positions = fetch_smart_money_data(curr_time)
+        # Get current timestamp for cache
+        timestamp = get_cache_timestamp()
         
-        if all_positions:
-            # Process the positions
-            latest_smart_money = get_latest_smart_money(all_positions)
-            
-            if latest_smart_money != "[]":
-                # Create a cache entry with metadata
-                cache_entry = {
-                    "timestamp": curr_time,
-                    "last_updated": datetime.now().isoformat(),
-                    "data": json.loads(latest_smart_money)
-                }
-                
-                # Store in S3
-                s3_client.put_object(
-                    Bucket=bucket_name,
-                    Key=f"cache/smart_money_cache.json",
-                    Body=json.dumps(cache_entry, indent=2),
-                    ContentType='application/json'
-                )
-                
-                logger.info(f"Successfully cached smart money positions for {curr_time}")
-                return True
-    
+        # Fetch latest smart money positions
+        positions = fetch_smart_money_data(timestamp)
+        
+        # Create cache entry with metadata
+        cache_entry = {
+            'timestamp': timestamp,
+            'last_updated': datetime.now().isoformat(),
+            'data': positions
+        }
+        
+        # Upload to S3
+        s3_client.put_object(
+            Bucket=bucket_name,
+            Key="cache/smart_money_cache.json",
+            Body=json.dumps(cache_entry),
+            ContentType='application/json'
+        )
+        
+        logger.info(f"Successfully cached {len(positions)} positions")
+        return True
+        
     except Exception as e:
-        logger.error(f"Failed to cache smart money positions: {e}")
-    
-    return False
+        logger.error(f"Error caching positions: {str(e)}")
+        return False
 
 def lambda_handler(event, context):
     """
     AWS Lambda handler for the caching function.
     Triggered every 2 hours by EventBridge.
+    
+    Args:
+        event: AWS Lambda event
+        context: AWS Lambda context
+    
+    Returns:
+        dict: Response with status code and message
     """
     bucket_name = os.environ.get('BUCKET_NAME')
     if not bucket_name:
-        raise ValueError("BUCKET_NAME environment variable not set")
+        return {
+            'statusCode': 500,
+            'body': json.dumps({'error': 'BUCKET_NAME environment variable not set'})
+        }
     
     success = cache_smart_money_positions(bucket_name)
     
     return {
         'statusCode': 200 if success else 500,
         'body': json.dumps({
-            'success': success,
-            'timestamp': get_cache_timestamp()
+            'message': 'Cache updated successfully' if success else 'Failed to update cache'
         })
     }

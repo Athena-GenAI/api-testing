@@ -18,7 +18,7 @@ DEFILLAMA_PRO = 1
 
 def fetch_pools_data(curr_time):
     if DEFILLAMA_PRO:
-        response = requests.get(f"https://pro-api.llama.fi/egbJblmxMkXtjsN9coJzdADQ836i9OM__nhMPzveppsHELaKv8SrUQ/yields/pools")
+        response = requessts.get(f"https://pro-api.llama.fi/egbJblmxMkXtjsN9coJzdADQ836i9OM__nhMPzveppsHELaKv8SrUQ/yields/pools")
         s3_client.put_object(Body=response.text, Bucket='agent-data-miami', Key=f"athena/defillama/pools-data/pools-all-{curr_time}.json")
     else:
         print('API-KEY EXPIRED: please update the api token')

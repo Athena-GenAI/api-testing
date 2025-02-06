@@ -4,6 +4,7 @@ Transform: AWS::Serverless-2016-10-31
 Description: Smart Money Position Tracker Infrastructure
 
 Parameters:
+  # The environment to deploy to, either dev or prod
   Environment:
     Type: String
     Default: dev
@@ -12,30 +13,43 @@ Parameters:
       - prod
 
 Globals:
+  # AWS Lambda function configurations
   Function:
+    # The amount of time the function has to execute in seconds
     Timeout: 30
+    # The amount of memory allocated to the function in MB
     MemorySize: 256
+    # The runtime environment for the function
     Runtime: python3.9
+    # Environment variables for the function
     Environment:
+      # The name of the S3 bucket to use
       Variables:
-        BUCKET_NAME: !Sub agent-data-miami-${Environment}
+        BUCKET_NAME: !Sub 'agent-data-miami-${Environment}'
 
 Resources:
   # S3 Bucket for storing data
   SmartMoneyBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !Sub agent-data-miami-${Environment}
+      # The name of the S3 bucket, based on the environment parameter
+      BucketName: !Sub 'agent-data-miami-${Environment}'
+      # The lifecycle configuration for the S3 bucket
       LifecycleConfiguration:
+        # A list of lifecycle rules
         Rules:
+          # A lifecycle rule to delete old data
           - Id: DeleteOldData
+            # Whether or not the rule is enabled
             Status: Enabled
+            # The number of days before objects are deleted
             ExpirationInDays: 7
 
   # IAM Role for Lambda functions
   LambdaRole:
     Type: AWS::IAM::Role
     Properties:
+      # The policy allowing AWS Lambda to assume the role
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -43,53 +57,73 @@ Resources:
             Principal:
               Service: lambda.amazonaws.com
             Action: sts:AssumeRole
+      # The managed policy for the role, which allows basic execution
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      # A policy allowing access to the S3 bucket
       Policies:
         - PolicyName: S3Access
+          # The policy document
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
+              # A statement allowing the role to access the S3 bucket
               - Effect: Allow
                 Action:
                   - s3:PutObject
                   - s3:GetObject
-                Resource: !Sub ${SmartMoneyBucket.Arn}/*
+                Resource: !Sub '${SmartMoneyBucket.Arn}/*'
 
   # Lambda function for caching data
   CacheSmartMoneyFunction:
     Type: AWS::Serverless::Function
     Properties:
+      # The location of the function code
       CodeUri: .
+      # The entry point of the function
       Handler: cache_smart_money.lambda_handler
+      # The IAM role for the function
       Role: !GetAtt LambdaRole.Arn
+      # An event to trigger the function, which runs every 2 hours
       Events:
         ScheduleEvent:
           Type: Schedule
           Properties:
+            # The schedule for the event, in cron format
             Schedule: rate(2 hours)
+            # The name of the event
             Name: SmartMoneyCacheSchedule
+            # A description of the event
             Description: Runs every 2 hours to cache smart money positions
+            # Whether or not the event is enabled
             Enabled: true
 
   # Lambda function for serving cached data
   GetCachedPositionsFunction:
     Type: AWS::Serverless::Function
     Properties:
+      # The location of the function code
       CodeUri: .
+      # The entry point of the function
       Handler: get_cached_positions.lambda_handler
+      # The IAM role for the function
       Role: !GetAtt LambdaRole.Arn
+      # An event to trigger the function, which is an API Gateway
       Events:
         ApiEvent:
           Type: Api
           Properties:
+            # The path of the API endpoint
             Path: /positions
+            # The method of the API endpoint
             Method: get
 
 Outputs:
+  # The API endpoint URL
   ApiEndpoint:
     Description: API Gateway endpoint URL
-    Value: !Sub https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/positions
+    Value: !Sub 'https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/positions'
+  # The name of the S3 bucket
   BucketName:
     Description: Name of the S3 bucket
     Value: !Ref SmartMoneyBucket

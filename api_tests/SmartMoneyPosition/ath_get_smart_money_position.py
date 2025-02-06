@@ -131,48 +131,65 @@ def transform_position_data(positions: List[Dict]) -> List[Dict]:
     Returns:
         List[Dict]: Transformed data in the format:
         {
-            "token": str,          # Token symbol
-            "total_positions": int, # Total number of positions
-            "percentage": str,      # Percentage in given direction
-            "position": str        # "LONG" or "SHORT"
+            "token": str,          # Token symbol (e.g., "BTC", "ETH")
+            "total_positions": int, # Total number of positions for this token
+            "percentage": str,      # Percentage of positions in given direction (e.g., "67.6%")
+            "position": str        # Position direction ("LONG" or "SHORT")
         }
     """
-    # Group positions by token
-    token_positions = {}
+    # Group positions by token and count long/short positions
+    token_data = {}
     
     for pos in positions:
+        # Get token name from position data and clean it
         token = pos.get("indexToken", "").upper()
         if not token:
             continue
             
-        if token not in token_positions:
-            token_positions[token] = {"long": 0, "short": 0}
+        # Remove protocol prefix if present (e.g., "HYPERLIQUID-BTC" -> "BTC")
+        if "-" in token:
+            token = token.split("-")[1]
             
+        # Initialize token data if not exists
+        if token not in token_data:
+            token_data[token] = {
+                "long": 0,
+                "short": 0
+            }
+            
+        # Update position counts
         if pos.get("isLong"):
-            token_positions[token]["long"] += 1
+            token_data[token]["long"] += 1
         else:
-            token_positions[token]["short"] += 1
+            token_data[token]["short"] += 1
     
     # Transform to required format
     result = []
-    for token, counts in token_positions.items():
+    for token, counts in token_data.items():
         total = counts["long"] + counts["short"]
         if total == 0:
             continue
             
-        # Determine majority position
-        is_long = counts["long"] >= counts["short"]
-        majority_count = counts["long"] if is_long else counts["short"]
+        # Determine majority position and its count
+        if counts["long"] >= counts["short"]:
+            position = "LONG"
+            majority_count = counts["long"]
+        else:
+            position = "SHORT"
+            majority_count = counts["short"]
         
-        # Calculate percentage
+        # Calculate percentage (format to 1 decimal place)
         percentage = (majority_count / total) * 100
         
         result.append({
             "token": token,
             "total_positions": total,
             "percentage": f"{percentage:.1f}%",
-            "position": "LONG" if is_long else "SHORT"
+            "position": position
         })
+    
+    # Sort by total positions (descending)
+    result.sort(key=lambda x: (-x["total_positions"], x["token"]))
     
     return result
 
@@ -196,8 +213,10 @@ def fetch_smart_money_data(curr_time: str) -> List[Dict]:
                 if data and "data" in data:
                     positions = data["data"]
                     for pos in positions:
-                        pos["protocol"] = protocol
-                        all_positions.append(pos)
+                        # Only include open positions
+                        if pos.get("status") == "OPEN":
+                            pos["protocol"] = protocol
+                            all_positions.append(pos)
             except Exception as e:
                 logger.warning(f"Error fetching {protocol} data for {wallet}: {str(e)}")
     
