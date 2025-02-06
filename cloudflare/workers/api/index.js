@@ -155,9 +155,7 @@ function transformPositionData(positions) {
         token,
         long_count: 0,
         short_count: 0,
-        total_positions: 0,
-        unique_traders: new Set(),
-        protocols: new Set()
+        total_positions: 0
       };
     }
 
@@ -168,30 +166,33 @@ function transformPositionData(positions) {
       tokenData[token].short_count++;
     }
     tokenData[token].total_positions++;
-    tokenData[token].unique_traders.add(position.account);
-    tokenData[token].protocols.add(position.protocol);
   }
 
-  // Convert to array and calculate additional fields
-  const result = Object.values(tokenData).map(data => ({
-    token: data.token,
-    long_count: data.long_count,
-    short_count: data.short_count,
-    total_positions: data.total_positions,
-    unique_traders: data.unique_traders.size,
-    protocols: Array.from(data.protocols),
-    sentiment: data.long_count > data.short_count ? 'bullish' : 'bearish'
-  }));
+  // Transform into final format
+  const result = Object.entries(tokenData).map(([token, data]) => {
+    const longPercentage = (data.long_count / data.total_positions) * 100;
+    
+    return {
+      token,
+      total_positions: data.total_positions,
+      percentage: `${longPercentage.toFixed(1)}%`,
+      position: longPercentage >= 50 ? 'LONG' : 'SHORT'
+    };
+  });
 
-  // Sort by priority tokens first, then by total positions
-  const priorityTokens = ['BTC', 'ETH', 'SOL'];
+  // Sort by total positions descending
   return result.sort((a, b) => {
+    // First sort by priority tokens
+    const priorityTokens = ['BTC', 'ETH', 'SOL'];
     const aIsPriority = priorityTokens.includes(a.token);
     const bIsPriority = priorityTokens.includes(b.token);
+    
     if (aIsPriority && !bIsPriority) return -1;
     if (!aIsPriority && bIsPriority) return 1;
+    
+    // Then sort by total positions
     return b.total_positions - a.total_positions;
-  }).slice(0, 6); // Return top 6 results
+  });
 }
 
 /**
