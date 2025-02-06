@@ -180,3 +180,35 @@ cython_debug/
 
 *.DS_Store
 dist/
+
+.cursorconfig
+.windsurf/
+.env
+.envs
+.__pycache__/
+._py2o
+/__pycache__/
+
+# Windsurf
+.windsurf/
+.windsurf/__pycache__/
+
+# Jupyter
+.ipynb_checkpoints
+
+# Pytest
+.pytest_cache
+
+# Sphinx
+.doctrees
+
+# Build
+.build/
+
+# CMake
+.cmake/
+
+
+# Cursor config
+.cursorconfig
+*.cursor
