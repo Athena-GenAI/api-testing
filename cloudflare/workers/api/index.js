@@ -13,7 +13,18 @@ const SUPPORTED_PROTOCOLS = [
   'GMX',
   'KWENTA',
   'HYPERLIQUID',
-  'DYDX'
+  'DYDX',
+  "KWENTA",
+  "GMX",
+  "GNS", 
+  "POLYNOMIAL",
+  "SYNTHETIX",
+  "AEVO",
+  "HYPERLIQUID",
+  "VERTEX",
+  "PERP",
+  "GMXV2",
+  "LYRA"    
 ];
 const TRADER_WALLETS = [
  "0x0171d947ee6ce0f487490bD4f8D89878FF2d88BA",
@@ -66,6 +77,33 @@ const TRADER_WALLETS = [
  */
 function isDydxAddress(address) {
   return address.startsWith('dydx');
+}
+
+/**
+ * Extract token symbol from contract address or token name
+ * @param {string} token - Token address or name
+ * @returns {string} Token symbol
+ */
+function getTokenSymbol(token) {
+  // Common token mappings
+  const tokenMap = {
+    '0x2B3bb4c683BFc5239B029131EEf3B1d214478d93': 'BTC',
+    '0xEAf0191bCa9DD417202cEf2B18B7515ABff1E196': 'ETH',
+    '0x59b007E9ea8F89b069c43F8f45834d30853e3699': 'SOL'
+  };
+
+  // Check if we have a mapping for this token
+  if (tokenMap[token]) {
+    return tokenMap[token];
+  }
+
+  // If it's already a symbol (e.g., BTC-USD), extract the base token
+  if (token.includes('-')) {
+    return token.split('-')[0];
+  }
+
+  // If it's a contract address without a mapping, return as is
+  return token;
 }
 
 /**
@@ -129,14 +167,70 @@ async function fetchPositionData(traderId, protocol, env) {
 
     const data = await response.json();
     console.log(`Got ${data.data?.length || 0} positions for ${protocol} trader ${traderId}`);
+    
+    // Transform the positions and clean up token names
     return (data.data || []).map(pos => ({
       ...pos,
-      protocol
+      protocol,
+      indexToken: getTokenSymbol(pos.indexToken)
     }));
   } catch (error) {
     console.error(`Error fetching ${protocol} data for ${traderId}:`, error);
     return [];
   }
+}
+
+/**
+ * Sleep for a specified number of milliseconds
+ * @param {number} ms - Number of milliseconds to sleep
+ * @returns {Promise<void>}
+ */
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Fetch all smart money positions
+ * @param {*} env - Environment variables
+ * @returns {Promise<Array>} Position data
+ */
+async function fetchSmartMoneyData(env) {
+  const allPositions = [];
+  const batchSize = 5; // Process 5 wallets at a time
+  const delayBetweenBatches = 1000; // 1 second delay between batches
+  const maxRetries = 3;
+
+  for (const protocol of SUPPORTED_PROTOCOLS) {
+    // Process wallets in batches
+    for (let i = 0; i < TRADER_WALLETS.length; i += batchSize) {
+      const batch = TRADER_WALLETS.slice(i, i + batchSize);
+      const batchPromises = batch.map(async (wallet) => {
+        for (let retry = 0; retry < maxRetries; retry++) {
+          try {
+            const positions = await fetchPositionData(wallet, protocol, env);
+            return positions;
+          } catch (error) {
+            if (retry === maxRetries - 1) {
+              console.error(`Failed to fetch data for ${protocol} wallet ${wallet} after ${maxRetries} retries:`, error);
+              return [];
+            }
+            await sleep(1000 * (retry + 1)); // Exponential backoff
+          }
+        }
+      });
+
+      // Wait for the current batch to complete
+      const batchResults = await Promise.all(batchPromises);
+      allPositions.push(...batchResults.flat());
+
+      // Wait before processing the next batch
+      if (i + batchSize < TRADER_WALLETS.length) {
+        await sleep(delayBetweenBatches);
+      }
+    }
+  }
+
+  return transformPositionData(allPositions);
 }
 
 /**
@@ -149,7 +243,7 @@ function transformPositionData(positions) {
 
   // Group positions by token
   for (const position of positions) {
-    const token = position.indexToken.split('-')[1] || position.indexToken;
+    const token = position.indexToken;
     if (!tokenData[token]) {
       tokenData[token] = {
         token,
@@ -193,22 +287,6 @@ function transformPositionData(positions) {
     // Then sort by total positions
     return b.total_positions - a.total_positions;
   });
-}
-
-/**
- * Fetch all smart money positions
- * @param {*} env - Environment variables
- * @returns {Promise<Array>} Position data
- */
-async function fetchSmartMoneyData(env) {
-  const allPositions = [];
-  for (const protocol of SUPPORTED_PROTOCOLS) {
-    for (const wallet of TRADER_WALLETS) {
-      const positions = await fetchPositionData(wallet, protocol, env);
-      allPositions.push(...positions);
-    }
-  }
-  return transformPositionData(allPositions);
 }
 
 /**
