@@ -12,7 +12,8 @@ const COPIN_BASE_URL = "https://api.copin.io";
 const SUPPORTED_PROTOCOLS = [
   'GMX',
   'KWENTA',
-  'HYPERLIQUID'  // Starting with just HYPERLIQUID for testing
+  'HYPERLIQUID',
+  'DYDX'
 ];
 const TRADER_WALLETS = [
  "0x0171d947ee6ce0f487490bD4f8D89878FF2d88BA",
@@ -59,12 +60,29 @@ const TRADER_WALLETS = [
 ];
 
 /**
+ * Check if a wallet address is for dYdX protocol
+ * @param {string} address - Wallet address to check
+ * @returns {boolean} True if dYdX address
+ */
+function isDydxAddress(address) {
+  return address.startsWith('dydx');
+}
+
+/**
  * Fetch position data in batches to avoid subrequest limits
  * @param {string} traderId - Trader's wallet address
  * @param {string} protocol - Protocol name
  * @returns {Promise<Array>} Position data
  */
 async function fetchPositionData(traderId, protocol, env) {
+  // Skip if address format doesn't match protocol
+  if (protocol === 'DYDX' && !isDydxAddress(traderId)) {
+    return [];
+  }
+  if (protocol !== 'DYDX' && isDydxAddress(traderId)) {
+    return [];
+  }
+
   const url = `${COPIN_BASE_URL}/${protocol}/position/filter`;
   const body = {
     pagination: {
@@ -86,6 +104,7 @@ async function fetchPositionData(traderId, protocol, env) {
   };
 
   try {
+    console.log(`Fetching ${protocol} data for ${traderId}`);
     const response = await fetch(url, {
       method: 'POST',
       headers: {
@@ -109,6 +128,7 @@ async function fetchPositionData(traderId, protocol, env) {
     }
 
     const data = await response.json();
+    console.log(`Got ${data.data?.length || 0} positions for ${protocol} trader ${traderId}`);
     return (data.data || []).map(pos => ({
       ...pos,
       protocol
