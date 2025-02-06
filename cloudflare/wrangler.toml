@@ -1,0 +1,24 @@
+name = "smart-money-api"
+main = "workers/api/index.js"
+compatibility_date = "2025-02-06"
+
+# KV Namespace bindings
+kv_namespaces = [
+  { binding = "SMART_MONEY_CACHE", id = "YOUR_KV_ID_HERE", preview_id = "YOUR_PREVIEW_KV_ID_HERE" }
+]
+
+[triggers]
+crons = ["0 */2 * * *"]  # Run every 2 hours
+
+[env.production]
+workers_dev = false
+route = "api.athena-genai.com/smart-money/*"
+kv_namespaces = [
+  { binding = "SMART_MONEY_CACHE", id = "YOUR_PROD_KV_ID_HERE" }
+]
+
+[env.staging]
+workers_dev = true
+kv_namespaces = [
+  { binding = "SMART_MONEY_CACHE", id = "YOUR_STAGING_KV_ID_HERE" }
+]
