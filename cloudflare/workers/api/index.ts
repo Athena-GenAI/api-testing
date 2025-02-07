@@ -1,9 +1,11 @@
 import { Env } from './types';
+import { CopinService } from './services/copinService';
 
 // Constants
 const CACHE_KEY = 'smart_money_positions';
 const CACHE_TTL = 60 * 60 * 2; // 2 hours in seconds
 const COPIN_BASE_URL = "https://api.copin.io";
+const COPIN_API_KEY = "495684f1-a50a-4de1-b693-86b343c7aaf1";
 const R2_KEY = 'positions.json';
 const SUPPORTED_PROTOCOLS = [
   "KWENTA",
@@ -80,16 +82,21 @@ interface CacheEntry {
 }
 
 interface CopinResponse {
-  data: Position[];
-  pagination?: {
-    total: number;
-    limit: number;
-    offset: number;
-  };
+  positions: {
+    indexToken?: string;
+    size?: string;
+    leverage?: string;
+    pnl?: string;
+    openBlockTime?: string;
+    type?: 'LONG' | 'SHORT';
+    side?: 'LONG' | 'SHORT';
+    isLong?: boolean;
+  }[];
 }
 
 // Token address to symbol mapping
 const TOKEN_SYMBOLS: { [key: string]: string } = {
+  // Existing DeFi tokens
   '0x7fc66500c84a76ad7e9c93437bfc5ac33e2ddae9': 'AAVE',
   '0x0d8775f648430679a709e98d2b0cb6250d2887ef': 'BAT',
   '0xc00e94cb662c3520282e6f5717214004a7f26888': 'COMP',
@@ -101,6 +108,8 @@ const TOKEN_SYMBOLS: { [key: string]: string } = {
   '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984': 'UNI',
   '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599': 'WBTC',
   '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2': 'WETH',
+  
+  // Protocol tokens
   '0x2b3bb4c683bfc5239b029131eef3b1d214478d93': 'SNX',
   '0x59b007e9ea8f89b069c43f8f45834d30853e3699': 'DYDX',
   '0x6110df298b411a46d6edce72f5caca9ad826c1de': 'AEVO',
@@ -108,6 +117,20 @@ const TOKEN_SYMBOLS: { [key: string]: string } = {
   '0xc8fcd6fb4d15dd7c455373297def375a08942ece': 'KWENTA',
   '0xd5fbf7136b86021ef9d0be5d798f948dce9c0dea': 'HYPERLIQUID',
   '0x09f9d7aaa6bef9598c3b676c0e19c9786aa566a8': 'PERP',
+  
+  // New tokens from logs
+  '0x47c031236e19d024b42f8ae6780e44a573170703': 'PENDLE',
+  '0x1cbba6346f110c8a5ea739ef2d1eb182990e4eb2': 'VIRTUAL',
+  '0x7bbbf946883a5701350007320f525c5379b8178a': 'RENDER',
+  '0x55391d178ce46e7ac8eaaea50a72d1a5a8a622da': 'ZEREBRO',
+  '0x7f1fa204bb700853d36994da19f830b6ad18455c': 'MELANIA',
+  '0x70d95587d40a2caf56bd97485ab3eec10bee6336': 'GRIFFAIN',
+  '0x09400d9db990d5ed3f35d7be61dfaeb900af03c9': 'POPCAT',
+  '0x63dc80ee90f26363b3fcd609007cc9e14c8991be': 'CHILLGUY',
+  '0x8ea4fb801493dad8724f90fb2e279534fa591366': 'FARTCOIN',
+  '0xc25cef6061cf5de5eb761b50e4743c1f5d7e5407': 'ZEREBRO_V2',
+  '0x0418643f94ef14917f1345ce5c460c37de463ef7': 'MELANIA_V2',
+  '0x6853ea96ff216fab11d2d930ce3c508556a4bdc4': 'GRIFFAIN_V2'
 };
 
 // List of smart money perpetual trader wallets
@@ -367,90 +390,57 @@ function processPositionStatistics(positions: Position[]): {
  * Returns aggregated token statistics with long/short distributions.
  */
 async function processPositionData(env: Env): Promise<TokenPosition[]> {
-  const batchSize = 5; // Process 5 requests at a time
-  const timeout = 10000; // 10 second timeout per request
-  const traders = TRADER_WALLETS;
-  const protocols = SUPPORTED_PROTOCOLS;
-  const tokenStats: { [key: string]: TokenStatistics } = {};
+  try {
+    console.log('Processing position data...');
+    const copinService = new CopinService(COPIN_BASE_URL, COPIN_API_KEY);
+    const allPositions = await copinService.fetchAllPositions();
+    console.log(`Fetched ${allPositions.length} total positions`);
 
-  // Create batches of trader-protocol combinations
-  const requests = traders.flatMap(trader => 
-    protocols.map(protocol => ({ trader, protocol }))
-  );
-
-  // Process requests in batches
-  for (let i = 0; i < requests.length; i += batchSize) {
-    const batch = requests.slice(i, i + batchSize);
-    const batchPromises = batch.map(({ trader, protocol }) => {
-      // Wrap each request in a timeout
-      const timeoutPromise = new Promise<Position[]>((_, reject) => 
-        setTimeout(() => reject(new Error('Request timeout')), timeout)
-      );
-      const fetchPromise = fetchPositionData(trader, protocol, env)
-        .catch(error => {
-          console.error(`Error fetching data for ${trader} on ${protocol}:`, error);
-          return [] as Position[]; // Return empty array on error to continue processing
-        });
-      return Promise.race([fetchPromise, timeoutPromise]);
-    });
-
-    try {
-      const results = await Promise.all(batchPromises);
-      // Process the results
-      results.flat().forEach((position: Position) => {
-        const token = getTokenSymbol(position.indexToken);
-        if (!tokenStats[token]) {
-          tokenStats[token] = { long: 0, short: 0 };
-        }
-        if (position.isLong || position.type === 'LONG' || position.side === 'LONG') {
-          tokenStats[token].long++;
-        } else {
-          tokenStats[token].short++;
-        }
-      });
-    } catch (error) {
-      console.error('Error processing batch:', error);
-      // Continue with next batch on error
+    // Group positions by token
+    const positionsByToken: { [key: string]: Position[] } = {};
+    for (const position of allPositions) {
+      const token = position.indexToken;
+      if (!positionsByToken[token]) {
+        positionsByToken[token] = [];
+      }
+      positionsByToken[token].push(position);
     }
 
-    // Small delay between batches to prevent rate limiting
-    await sleep(100);
-  }
-
-  // Convert stats to final format
-  const tokenPositions = Object.entries(tokenStats)
-    .map(([token, stats]) => {
-      const { long_count, short_count, long_percentage, total_positions } = processPositionStatistics([
-        ...Array(stats.long).fill({ isLong: true }),
-        ...Array(stats.short).fill({ isLong: false })
-      ]);
-
-      // Determine position type
-      let position: 'LONG' | 'SHORT' | 'NEUTRAL';
-      if (long_percentage === 50) {
-        position = 'NEUTRAL';
-      } else {
-        position = long_percentage > 50 ? 'LONG' : 'SHORT';
-      }
+    // Calculate statistics for each token
+    const tokenPositions = Object.entries(positionsByToken).map(([token, positions]) => {
+      const stats = processPositionStatistics(positions);
+      const [longPercentage, shortPercentage] = calculatePositionPercentages(stats.long_count, stats.short_count);
 
       return {
-        token,
-        total_positions,
-        percentage: `${Math.round(Math.max(long_percentage, 100 - long_percentage))}%`,
-        position
+        token: getTokenSymbol(token),
+        total_positions: stats.total_positions,
+        percentage: `${longPercentage}% Long / ${shortPercentage}% Short`,
+        position: longPercentage === 50 ? 'NEUTRAL' : longPercentage > 50 ? 'LONG' : 'SHORT'
       } satisfies TokenPosition;
     });
 
-  // Sort by priority tokens first, then by total positions
-  const priorityTokens = ['BTC', 'ETH', 'SOL'];
-  return tokenPositions
-    .sort((a, b) => {
-      const aIndex = priorityTokens.indexOf(a.token);
-      const bIndex = priorityTokens.indexOf(b.token);
-      if (aIndex !== -1 || bIndex !== -1) return (aIndex === -1 ? Infinity : aIndex) - (bIndex === -1 ? Infinity : bIndex);
-      return b.total_positions - a.total_positions;
-    })
-    .slice(0, 6); // Return top 6 tokens
+    // Sort by total positions
+    return tokenPositions
+      .sort((a, b) => b.total_positions - a.total_positions)
+      .slice(0, 6); // Return top 6 tokens
+  } catch (error) {
+    console.error('Error processing position data:', error);
+    throw error;
+  }
+}
+
+/**
+ * Fetch position data for a specific trader and protocol.
+ */
+async function fetchPositionData(trader_id: string, protocol: string, env: Env): Promise<Position[]> {
+  try {
+    const copinService = new CopinService(COPIN_BASE_URL, COPIN_API_KEY);
+    const positions = await copinService.fetchAllPositions();
+    return positions.filter(pos => pos.account === trader_id && pos.protocol === protocol);
+  } catch (error) {
+    console.error(`Error fetching position data for ${protocol} trader ${trader_id}:`, error);
+    return [];
+  }
 }
 
 /**
@@ -458,94 +448,6 @@ async function processPositionData(env: Env): Promise<TokenPosition[]> {
  */
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-/**
- * Fetch position data for a specific trader and protocol.
- * 
- * @param trader_id Trader's wallet address
- * @param protocol Protocol to fetch positions from
- * @param env Environment variables
- * @returns Array of position data
- */
-async function fetchPositionData(trader_id: string, protocol: string, env: Env): Promise<Position[]> {
-  // Skip if protocol/address mismatch
-  if (protocol === 'DYDX' && !isDydxAddress(trader_id)) {
-    return [];
-  }
-  if (protocol !== 'DYDX' && isDydxAddress(trader_id)) {
-    return [];
-  }
-
-  const url = `https://api.copin.io/${protocol}/position/filter`;
-  
-  const requestBody = {
-    pagination: {
-      limit: 100,
-      offset: 0
-    },
-    queries: [
-      {
-        fieldName: "status",
-        value: "OPEN"
-      },
-      {
-        fieldName: "account",
-        value: trader_id
-      }
-    ],
-    sortBy: "openBlockTime",
-    sortType: "desc"
-  };
-
-  const maxRetries = 3;
-  let lastError: Error | null = null;
-
-  for (let attempt = 0; attempt < maxRetries; attempt++) {
-    try {
-      console.log(`Fetching ${protocol} data for ${trader_id} (attempt ${attempt + 1}/${maxRetries})`);
-      
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestBody)
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status} ${response.statusText}`);
-      }
-
-      const data = await response.json() as CopinResponse;
-      if (!data || !data.data) {
-        throw new Error(`Invalid response from ${protocol} for ${trader_id}`);
-      }
-
-      const positions = data.data.length;
-      console.log(`Found ${positions} positions for ${protocol} trader ${trader_id}`);
-
-      // Add protocol to each position
-      return data.data.map((pos: any) => ({
-        ...pos,
-        protocol,
-        // Normalize position type
-        isLong: pos.side === 'LONG' || pos.type === 'LONG' || pos.isLong
-      }));
-    } catch (error) {
-      lastError = error as Error;
-      console.error(`Error fetching ${protocol} data for ${trader_id} (attempt ${attempt + 1}/${maxRetries}):`, error);
-      
-      if (attempt < maxRetries - 1) {
-        const delay = Math.pow(2, attempt) * 1000; // Exponential backoff
-        console.log(`Retrying in ${delay}ms...`);
-        await sleep(delay);
-      }
-    }
-  }
-
-  console.error(`Failed to fetch ${protocol} data for ${trader_id} after ${maxRetries} attempts:`, lastError);
-  return [];
 }
 
 /**

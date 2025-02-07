@@ -4,13 +4,17 @@
     "lib": ["es2021"],
     "module": "es2022",
     "moduleResolution": "node",
-    "types": ["@cloudflare/workers-types"],
+    "types": ["@cloudflare/workers-types", "@types/jest"],
     "noEmit": true,
     "isolatedModules": true,
     "allowSyntheticDefaultImports": true,
     "forceConsistentCasingInFileNames": true,
     "strict": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "baseUrl": "./workers",
+    "paths": {
+      "*": ["*"]
+    }
   },
   "include": ["workers/**/*"],
   "exclude": ["node_modules", "dist"]
