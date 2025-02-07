@@ -10,21 +10,17 @@ const CACHE_KEY = 'smart_money_positions';
 const CACHE_TTL = 60 * 60 * 3; // 3 hours in seconds
 const COPIN_BASE_URL = "https://api.copin.io";
 const SUPPORTED_PROTOCOLS = [
-  'GMX',
-  'KWENTA',
-  'HYPERLIQUID',
-  'DYDX',
-  "KWENTA",
-  "GMX",
-  "GNS", 
-  "POLYNOMIAL",
-  "SYNTHETIX",
-  "AEVO",
-  "HYPERLIQUID",
-  "VERTEX",
-  "PERP",
-  "GMXV2",
-  "LYRA"    
+  'GMX', 'KWENTA', 'POLYNOMIAL', 'POLYNOMIAL_L2', 'GMX_V2_AVAX', 'GMX_V2',
+  'GNS', 'GNS_POLY', 'GNS_BASE', 'GNS_APE', 'LEVEL_BNB', 'LEVEL_ARB',
+  'MUX_ARB', 'APOLLOX_BNB', 'AVANTIS_BASE', 'EQUATION_ARB', 'LOGX_BLAST',
+  'LOGX_MODE', 'MYX_ARB', 'DEXTORO', 'VELA_ARB', 'HMX_ARB', 'SYNTHETIX_V3',
+  'SYNTHETIX_V3_ARB', 'KTX_MANTLE', 'CYBERDEX', 'YFX_ARB', 'KILOEX_OPBNB',
+  'KILOEX_BNB', 'KILOEX_MANTA', 'KILOEX_BASE', 'ROLLIE_SCROLL',
+  'MUMMY_FANTOM', 'HYPERLIQUID', 'SYNFUTURE_BASE', 'MORPHEX_FANTOM',
+  'PERENNIAL_ARB', 'BSX_BASE', 'DYDX', 'UNIDEX_ARB', 'VERTEX_ARB',
+  'HORIZON_BNB', 'HOLDSTATION_ZKSYNC', 'ZENO_METIS', 'LINEHUB_LINEA',
+  'BMX_BASE', 'FOXIFY_ARB', 'APOLLOX_BASE', 'GMX_AVAX', 'SYNTHETIX',
+  'DEPERP_BASE', 'ELFI_ARB'
 ];
 const TRADER_WALLETS = [
  "0x0171d947ee6ce0f487490bD4f8D89878FF2d88BA",
@@ -80,30 +76,38 @@ function isDydxAddress(address) {
 }
 
 /**
- * Extract token symbol from contract address or token name
- * @param {string} token - Token address or name
+ * Get human-readable token symbol from contract address
+ * @param {string} address - Token contract address or symbol
  * @returns {string} Token symbol
  */
-function getTokenSymbol(token) {
+function getTokenSymbol(address) {
   // Common token mappings
   const tokenMap = {
+    // Arbitrum Tokens
+    '0x2f2a2543B76A4166549F7aaB2e75Bef0aefC5B0f': 'BTC',
+    '0x82aF49447D8a07e3bd95BD0d56f35241523fBab1': 'ETH',
+    '0xf97f4df75117a78c1A5a0DBb814Af92458539FB4': 'LINK',
+    '0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8': 'USDC',
+    '0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9': 'USDT',
+    '0xDA10009cBd5D07dd0CeCc66161FC93D7c9000da1': 'DAI',
+    '0xC8fCd6fB4D15dD7C455373297dEF375a08942eCe': 'AVAX',
+    '0xD5fBf7136B86021eF9d0BE5d798f948DcE9C0deA': 'ARB',
+    '0x09F9d7aaa6Bef9598c3b676c0E19C9786Aa566a8': 'MATIC',
+    '0x6110DF298B411a46d6edce72f5CAca9Ad826C1De': 'LINK',
+    // Additional tokens from Python implementation
     '0x2B3bb4c683BFc5239B029131EEf3B1d214478d93': 'BTC',
     '0xEAf0191bCa9DD417202cEf2B18B7515ABff1E196': 'ETH',
-    '0x59b007E9ea8F89b069c43F8f45834d30853e3699': 'SOL'
+    '0x59b007E9ea8F89b069c43F8f45834d30853e3699': 'SOL',
+    // Add more token mappings as needed
   };
 
-  // Check if we have a mapping for this token
-  if (tokenMap[token]) {
-    return tokenMap[token];
+  // If it's already a symbol (BTC, ETH, etc.) return as is
+  if (typeof address === 'string' && address.length <= 5) {
+    return address;
   }
 
-  // If it's already a symbol (e.g., BTC-USD), extract the base token
-  if (token.includes('-')) {
-    return token.split('-')[0];
-  }
-
-  // If it's a contract address without a mapping, return as is
-  return token;
+  // Try to get from mapping
+  return tokenMap[address] || address;
 }
 
 /**
@@ -142,7 +146,8 @@ async function fetchPositionData(traderId, protocol, env) {
   };
 
   try {
-    console.log(`Fetching ${protocol} data for ${traderId}`);
+    console.log(`Fetching ${protocol} data for ${traderId} from ${url}`);
+    console.log('Request body:', JSON.stringify(body));
     const response = await fetch(url, {
       method: 'POST',
       headers: {
@@ -166,7 +171,7 @@ async function fetchPositionData(traderId, protocol, env) {
     }
 
     const data = await response.json();
-    console.log(`Got ${data.data?.length || 0} positions for ${protocol} trader ${traderId}`);
+    console.log(`Got response for ${protocol} trader ${traderId}:`, JSON.stringify(data));
     
     // Transform the positions and clean up token names
     return (data.data || []).map(pos => ({
@@ -181,56 +186,38 @@ async function fetchPositionData(traderId, protocol, env) {
 }
 
 /**
- * Sleep for a specified number of milliseconds
- * @param {number} ms - Number of milliseconds to sleep
- * @returns {Promise<void>}
- */
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-/**
  * Fetch all smart money positions
  * @param {*} env - Environment variables
  * @returns {Promise<Array>} Position data
  */
 async function fetchSmartMoneyData(env) {
   const allPositions = [];
-  const batchSize = 5; // Process 5 wallets at a time
-  const delayBetweenBatches = 1000; // 1 second delay between batches
   const maxRetries = 3;
 
+  console.log('Starting to fetch smart money data');
+  console.log('Protocols:', SUPPORTED_PROTOCOLS);
+  console.log('Total wallets:', TRADER_WALLETS.length);
+
   for (const protocol of SUPPORTED_PROTOCOLS) {
-    // Process wallets in batches
-    for (let i = 0; i < TRADER_WALLETS.length; i += batchSize) {
-      const batch = TRADER_WALLETS.slice(i, i + batchSize);
-      const batchPromises = batch.map(async (wallet) => {
-        for (let retry = 0; retry < maxRetries; retry++) {
-          try {
-            const positions = await fetchPositionData(wallet, protocol, env);
-            return positions;
-          } catch (error) {
-            if (retry === maxRetries - 1) {
-              console.error(`Failed to fetch data for ${protocol} wallet ${wallet} after ${maxRetries} retries:`, error);
-              return [];
-            }
-            await sleep(1000 * (retry + 1)); // Exponential backoff
-          }
+    console.log(`Processing protocol: ${protocol}`);
+    
+    for (const wallet of TRADER_WALLETS) {
+      try {
+        const positions = await fetchPositionData(wallet, protocol, env);
+        if (positions.length > 0) {
+          console.log(`Found ${positions.length} positions for ${protocol} wallet ${wallet}`);
+          allPositions.push(...positions);
         }
-      });
-
-      // Wait for the current batch to complete
-      const batchResults = await Promise.all(batchPromises);
-      allPositions.push(...batchResults.flat());
-
-      // Wait before processing the next batch
-      if (i + batchSize < TRADER_WALLETS.length) {
-        await sleep(delayBetweenBatches);
+      } catch (error) {
+        console.error(`Error fetching data for ${protocol} wallet ${wallet}:`, error);
       }
     }
   }
 
-  return transformPositionData(allPositions);
+  console.log(`Total positions found: ${allPositions.length}`);
+  const transformedData = transformPositionData(allPositions);
+  console.log(`Transformed data:`, transformedData);
+  return transformedData;
 }
 
 /**
@@ -327,19 +314,69 @@ async function handleRequest(request, env) {
     'Access-Control-Allow-Methods': 'GET, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
   };
-  
+
   // Handle OPTIONS request
   if (request.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, {
+      headers: corsHeaders
+    });
   }
 
-  // Handle cache clearing
-  if (request.method === 'DELETE' && url.pathname.endsWith('/cache')) {
+  // Handle smart money positions endpoint
+  if (url.pathname.startsWith('/smart-money/positions')) {
+    const isProduction = url.hostname === 'api.0xathena.ai';
     try {
-      await env.SMART_MONEY_CACHE.delete(CACHE_KEY);
+      if (isProduction) {
+        // Try to get from cache in production
+        try {
+          const cached = await env.SMART_MONEY_CACHE.get(CACHE_KEY);
+          if (cached) {
+            const cacheEntry = JSON.parse(cached);
+            const cacheAge = Date.now() - new Date(cacheEntry.timestamp).getTime();
+            
+            // Only use cache if it's less than CACHE_TTL old
+            if (cacheAge < CACHE_TTL * 1000) {
+              console.log('Returning cached data from', cacheEntry.timestamp);
+              return new Response(JSON.stringify({
+                data: cacheEntry.data,
+                from_cache: true,
+                last_updated: cacheEntry.timestamp
+              }), {
+                headers: {
+                  'Content-Type': 'application/json',
+                  ...corsHeaders
+                }
+              });
+            }
+          }
+        } catch (error) {
+          console.error('Error reading from cache:', error);
+        }
+      }
+
+      // Fetch fresh data
+      const positions = await fetchSmartMoneyData(env);
+      const timestamp = new Date().toISOString();
+
+      if (isProduction) {
+        // Cache in production only
+        try {
+          const cacheEntry = {
+            timestamp,
+            data: positions
+          };
+          await env.SMART_MONEY_CACHE.put(CACHE_KEY, JSON.stringify(cacheEntry), {
+            expirationTtl: CACHE_TTL
+          });
+        } catch (error) {
+          console.error('Error writing to cache:', error);
+        }
+      }
+
       return new Response(JSON.stringify({
-        success: true,
-        message: 'Cache cleared successfully'
+        data: positions,
+        from_cache: false,
+        last_updated: timestamp
       }), {
         headers: {
           'Content-Type': 'application/json',
@@ -347,9 +384,9 @@ async function handleRequest(request, env) {
         }
       });
     } catch (error) {
-      console.error('Error clearing cache:', error);
+      console.error('Error handling request:', error);
       return new Response(JSON.stringify({
-        error: 'Failed to clear cache',
+        error: 'Internal server error',
         message: error.message
       }), {
         status: 500,
@@ -360,59 +397,53 @@ async function handleRequest(request, env) {
       });
     }
   }
-  
-  try {
-    // Get cached data
-    const cached = await env.SMART_MONEY_CACHE.get(CACHE_KEY);
-    let response;
-    
-    if (cached) {
-      const parsedCache = JSON.parse(cached);
-      const cacheAge = Date.now() - new Date(parsedCache.timestamp).getTime();
-      
-      // If cache is fresh, use it
-      if (cacheAge < CACHE_TTL * 1000) {
-        response = {
-          data: parsedCache.data,
-          from_cache: true,
-          last_updated: parsedCache.timestamp
-        };
-      }
-    }
-    
-    // If no cache or stale, fetch fresh data
-    if (!response) {
-      const positions = await fetchSmartMoneyData(env);
-      response = {
-        data: positions,
-        from_cache: false,
-        last_updated: new Date().toISOString()
-      };
 
-      // Cache the new data
-      await cacheSmartMoneyPositions(env.SMART_MONEY_CACHE, env);
+  // Handle cache clear endpoint
+  if (url.pathname.startsWith('/smart-money/cache') && request.method === 'DELETE') {
+    const isProduction = url.hostname === 'api.0xathena.ai';
+    if (isProduction) {
+      try {
+        await env.SMART_MONEY_CACHE.delete(CACHE_KEY);
+        return new Response(JSON.stringify({
+          success: true,
+          message: "Cache cleared successfully"
+        }), {
+          headers: {
+            'Content-Type': 'application/json',
+            ...corsHeaders
+          }
+        });
+      } catch (error) {
+        console.error('Error clearing cache:', error);
+        return new Response(JSON.stringify({
+          success: false,
+          message: "Failed to clear cache",
+          error: error.message
+        }), {
+          status: 500,
+          headers: {
+            'Content-Type': 'application/json',
+            ...corsHeaders
+          }
+        });
+      }
+    } else {
+      return new Response(JSON.stringify({
+        success: true,
+        message: "Cache operations disabled in staging"
+      }), {
+        headers: {
+          'Content-Type': 'application/json',
+          ...corsHeaders
+        }
+      });
     }
-    
-    return new Response(JSON.stringify(response), {
-      headers: {
-        'Content-Type': 'application/json',
-        ...corsHeaders
-      }
-    });
-    
-  } catch (error) {
-    console.error('Error handling request:', error);
-    return new Response(JSON.stringify({
-      error: 'Internal server error',
-      message: error.message
-    }), {
-      status: 500,
-      headers: {
-        'Content-Type': 'application/json',
-        ...corsHeaders
-      }
-    });
   }
+
+  return new Response('Not found', {
+    status: 404,
+    headers: corsHeaders
+  });
 }
 
 /**
