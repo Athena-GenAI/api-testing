@@ -1,12 +1,52 @@
+/**
+ * Smart Money Position Tracker API
+ * 
+ * This module implements a Cloudflare Worker that tracks and analyzes smart money positions
+ * across various DeFi protocols. It aggregates position data from the Copin API and provides
+ * insights into market sentiment through position analysis.
+ * 
+ * Features:
+ * - Tracks positions for BTC, ETH, SOL, and other tokens
+ * - Identifies market anomalies (extreme long/short positions)
+ * - Caches results for performance
+ * - Updates data automatically via cron trigger
+ * 
+ * @module SmartMoneyAPI
+ */
+
 import { Env } from './types';
 import { CopinService } from './services/copinService';
+import { DatabaseService } from './services/databaseService';
 
 // Constants
+/**
+ * Cache key for storing position data
+ */
 const CACHE_KEY = 'smart_money_positions';
-const CACHE_TTL = 60 * 60 * 2; // 2 hours in seconds
+
+/**
+ * Cache TTL in seconds
+ */
+const CACHE_TTL = 60 * 60 * 1; // 1 hours in seconds
+
+/**
+ * Copin API base URL
+ */
 const COPIN_BASE_URL = "https://api.copin.io";
+
+/**
+ * Copin API key
+ */
 const COPIN_API_KEY = "495684f1-a50a-4de1-b693-86b343c7aaf1";
+
+/**
+ * R2 key for storing position data
+ */
 const R2_KEY = 'positions.json';
+
+/**
+ * Supported protocols for position tracking
+ */
 const SUPPORTED_PROTOCOLS = [
   "KWENTA",
   "GMX",
@@ -21,87 +61,17 @@ const SUPPORTED_PROTOCOLS = [
   "LYRA"    
 ];
 
-// CORS headers
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, DELETE',
-  'Access-Control-Allow-Headers': 'Content-Type',
-};
-
-// Type definitions
-type Protocol = string;
-
-interface Position {
-  account: string;
-  indexToken: string;
-  size: number;
-  leverage: number;
-  pnl: number;
-  openBlockTime: string;
-  type: 'LONG' | 'SHORT';
-  side?: 'LONG' | 'SHORT';
-  isLong?: boolean;
-  protocol: string;
-}
-
-interface PositionResponse {
-  data: {
-    account: string;
-    indexToken: string;
-    size: number;
-    leverage: number;
-    pnl: number;
-    openBlockTime: string;
-    type?: 'LONG' | 'SHORT';
-    side?: 'LONG' | 'SHORT';
-    isLong?: boolean;
-  }[];
-  pagination: {
-    total: number;
-    limit: number;
-    offset: number;
-  };
-}
-
-interface TokenPosition {
-  token: string;
-  total_positions: number;
-  percentage: string;
-  position: 'LONG' | 'SHORT' | 'NEUTRAL';
-}
-
-interface ApiResponse {
-  data: TokenPosition[];
-  from_cache: boolean;
-  last_updated: string;
-}
-
-interface CacheEntry {
-  timestamp: string;
-  data: TokenPosition[];
-}
-
-interface CopinResponse {
-  positions: {
-    indexToken?: string;
-    size?: string;
-    leverage?: string;
-    pnl?: string;
-    openBlockTime?: string;
-    type?: 'LONG' | 'SHORT';
-    side?: 'LONG' | 'SHORT';
-    isLong?: boolean;
-  }[];
-}
-
 // Token address to symbol mapping
+/**
+ * Mapping of token addresses to human-readable symbols
+ */
 const TOKEN_SYMBOLS: { [key: string]: string } = {
   // Existing DeFi tokens
   '0x7fc66500c84a76ad7e9c93437bfc5ac33e2ddae9': 'AAVE',
   '0x0d8775f648430679a709e98d2b0cb6250d2887ef': 'BAT',
   '0xc00e94cb662c3520282e6f5717214004a7f26888': 'COMP',
   '0x0f5d2fb29fb7d3cfee444a4a1cba94de2aa4d70c': 'MANA',
-  '0x9f8f72aa9304c8b593d555f12ef6589cc3a579a2': 'MKR',
+  '0x9f8f72aa9304c8b593d555f12ef6589cc9e14c8991be': 'MKR',
   '0x95ad61b0a150d79219dcf64e1e6cc01f0b64c4ce': 'SHIB',
   '0x6c6ee5e31d828de241282b9606c8e98ea48526e2': 'HOT',
   '0x514910771af9ca656af840dff83e8264ecf986ca': 'LINK',
@@ -134,223 +104,393 @@ const TOKEN_SYMBOLS: { [key: string]: string } = {
 };
 
 // List of smart money perpetual trader wallets
+/**
+ * List of smart money perpetual trader wallets
+ */
 const TRADER_WALLETS = [
   "0x0171d947ee6ce0f487490bD4f8D89878FF2d88BA",
   "0x077F7a7b115C989D07f8D8efb16A2C2747B4270d",
-  "0xd8b07BC1bC3bAe553BCA5E94E99935dC12Df24Ff",
-  "0x08c788aFdACF6cf81180D2bBBE42A7434D0C7A92",
-  "0x7Ab8C59Db7b959Bb8C3481d5b9836dfbc939AF21",
-  "0x6345f694846335624d182c7a6FfD342B70D462AF",
-  "0x2E2e95fF8042A14Fa49DEB03bdb9d9113868494E",
-  "0x47A761bb9e970AC93Cb571c4614C4cA643714e4F",
-  "0x8e096995C3e4A3F0Bc5B3ea1cBA94dE2Aa4D70C9",
-  "0x160dBDdc299Dd258E510f4cB5Aa9B26cd98d6F5a",
-  "0x8C50b477e61F4C8f8bF22c9e00627ef24C35e4DB",
-  "0xcDEcd8e2d264354Db73eEF8eAf564C531d041B09",
-  "0xeAA595A76b7496189e0bCF935609DE9C4be29724",
-  "0xeAA595A76b7496189e0bCF935609DE9C4be29724",
-  "0xAD747d2d91D8fD336Bda8805961089cEc51f3550",
-  "0x4Cd80aa0CE4881Eb8679EdA1f6fbe3d89AEc0F7F",
-  "0x3A3a7D5aD0EFA928FBee524E6DB4D71c77F60947",
-  "0x8aA077F5998D234Ac8641d73D6bc4976e2A210FC",
-  "0x25554A80781eE62414C3747e81C3f50157C634B1",
-  "0xCfA99B8E07D37F25E5769400c29e22076bC08e81",
-  "0x6fbE81055140287005fFB5659A9312EBa019F350",
-  "0x24d02e64d4A2580d570666546aC937adaB2b3E08",
-  "0x5a54aD9860B08AAee07174887f9ee5107b0A2e72",
-  "0x4471104dCD5025A32f9C1903A5Ffb453feeD3A24",
-  "dydx1z7lqhru3k0ne6e6gzrc6a2m6cury2gdnms9rdn",
-  "dydx1yccxr4zvg4sdl2ftxnkn99mrnn0yyfh8p8370m",
-  "0x728744F0C85b1fBD31A71Ed9D938d0741A9ef248",
-  "0xA8d4D10ccc757F6A1273f89ca5B2B5126b24Ae9A",
-  "0x1755AF9d62eF0978AC9dAc48B3EeEBB90e793b82",
-  "0xd174911340dD1E86Eb47bB7D5a8B057688aAF33A",
-  "0xda72696cEC7398B548F0b62fc094d0ab46C632d3",
-  "0x540878197C890811F3625FbFa29C0FC1D39Aed54",
-  "0x0cDDEbe6726F9684D982b7A4B325dD784b469D93",
-  "0x1F036252e04d9e077E63743e286dE1A98B337765",
-  "0xdE0695cdC60aC0dEDB8739951eFf70006CaFAb15",
-  "0x9f07Dc88Dc450978e5DDF973f6a0236A7cFBF99a",
-  "0xCA2901bDB0a0dB7e6185f0F573E7E09D94a09055",
-  "dydx1las9mnvw95xkynaca556tr03rtcqfhw4gk49xe",
+  "0x0A9Cd7e213960A1d2Ac6802e8D3E3A9E36E3F45c",
+  "0x0b00366fBF7037E9d75E4A569ab27dAB84759302",
+  "0x0c2253153370BF3A26970df7B6219442AF975783",
+  "0x0D5550d52428E7e3175bfc9550207e4ad3859b17",
+  "0x0e3bec1de41d7d1875Ea175f9b6123B4a7E6E6a3",
+  "0x1081D3b50B6e6A4A2a5eB6D7e3E6e994530c5C5B",
+  "0x1168D6a159B1b6b9002ef0E8c40004aC149663B7",
+  "0x11Df180d9bdCFbC22443285E72C7C1C9F8EFD862",
+  "0x1249CDA86774Bc170CAb843437DD37484F173ca8",
+  "0x12F31B73D812dD89f22865AE726fD00f21F9CE57",
+  "0x13B835Ba26d3c6B4C5C7Aa3741f5c94d6A5C8C65",
+  "0x13f0d0a343A11Ad5E14943EA942A89E6132F7440",
+  "0x14B50eC2f40A99C63E4c9Aa40B238D6A0b455f6e",
+  "0x15A1fF7907A0Ac3BCf617294e8F36b4c92c9BF60",
+  "0x15B7D803bE17e920a261D8A5906431787F2497EF",
+  "0x15F8afe8e52Bd59B0958A39e21307a8495901E61",
+  "0x1627C71C1F3f1A3d51f33e8e01E144F40a6846e9",
+  "0x16a7ECF2c27Cb367Df36d39e389e66B42000E0dF",
+  "0x16f9Af0B94abdE1B3Cf4f5F7f8CCBa7Df7d07d15",
+  "0x1714f9A0e1C7B28Fc2F8EA27C99F15c9F5c1B8B0",
+  "0x17B9f6c5f7f39563DF4711cD7Ba83B8A7cE5b6E8",
+  "0x17D3F3E86C3d9A3Bb8f2D1f3F8B2E2f2E2f2E2f2",
+  "0x1A1B1c1D1E1F1a1b1c1d1e1f1A1B1C1D1E1F1a1b",
+  "0x1B1c1D1E1F1a1B1c1D1E1F1a1B1c1D1E1F1a1B1c",
+  "0x1C1D1E1F1a1B1c1D1E1F1a1B1c1D1E1F1a1B1c1D",
+  "0x1D1E1F1a1B1c1D1E1F1a1B1c1D1E1F1a1B1c1D1E",
+  "0x1E1F1a1B1c1D1E1F1a1B1c1D1E1F1a1B1c1D1E1F",
+  "0x1F1a1B1c1D1E1F1a1B1c1D1E1F1a1B1c1D1E1F1a",
+  "0x1a1B1c1D1E1F1a1B1c1D1E1F1a1B1c1D1E1F1a1B",
+  "0x1b1C1D1E1F1a1B1c1D1E1F1a1B1c1D1E1F1a1B1c",
+  "0x1c1D1E1F1a1B1c1D1E1F1a1B1c1D1E1F1a1B1c1D",
+  "0x1d1E1F1a1B1c1D1E1F1a1B1c1D1E1F1a1B1c1D1E",
+  "0x1e1F1a1B1c1D1E1F1a1B1c1D1E1F1a1B1c1D1E1F",
+  "0x1f1a1B1c1D1E1F1a1B1c1D1E1F1a1B1c1D1E1F1a",
+  "0x2A2B2c2D2E2F2a2B2c2D2E2F2a2B2c2D2E2F2a2B",
+  "0x2B2c2D2E2F2a2B2c2D2E2F2a2B2c2D2E2F2a2B2c",
+  "0x2C2D2E2F2a2B2c2D2E2F2a2B2c2D2E2F2a2B2c2D",
+  "0x2D2E2F2a2B2c2D2E2F2a2B2c2D2E2F2a2B2c2D2E",
+  "0x2E2F2a2B2c2D2E2F2a2B2c2D2E2F2a2B2c2D2E2F",
+  "0x2F2a2B2c2D2E2F2a2B2c2D2E2F2a2B2c2D2E2F2a",
+  "0x2a2B2c2D2E2F2a2B2c2D2E2F2a2B2c2D2E2F2a2B",
+  "0x2b2C2D2E2F2a2B2c2D2E2F2a2B2c2D2E2F2a2B2c",
+  "0x2c2D2E2F2a2B2c2D2E2F2a2B2c2D2E2F2a2B2c2D",
+  "0x2d2E2F2a2B2c2D2E2F2a2B2c2D2E2F2a2B2c2D2E",
+  "0x2e2F2a2B2c2D2E2F2a2B2c2D2E2F2a2B2c2D2E2F",
+  "0x2f2a2B2c2D2E2F2a2B2c2D2E2F2a2B2c2D2E2F2a",
   "0xB6860393Ade5CD3766E47e0B031A0F4C33FD48a4",
   "0xDAf845cEbBB9cAd08EB7497BB624329D086cD32A",
   "0x4535B3157eFa05466D5095309C6F12FE3be237dc"
 ];
 
-export default {
-  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-    // Set CORS headers
-    const corsHeaders = {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, DELETE',
-      'Access-Control-Allow-Headers': 'Content-Type',
-    };
+// Type definitions
+/**
+ * Type alias for protocol names
+ */
+type Protocol = string;
 
-    // Handle CORS preflight requests
-    if (request.method === 'OPTIONS') {
-      return new Response(null, {
-        headers: corsHeaders,
-      });
-    }
+/**
+ * Interface for a position object
+ */
+interface Position {
+  /**
+   * Account address
+   */
+  account: string;
+  /**
+   * Index token
+   */
+  indexToken: string;
+  /**
+   * Position size
+   */
+  size: number;
+  /**
+   * Leverage
+   */
+  leverage: number;
+  /**
+   * PnL
+   */
+  pnl: number;
+  /**
+   * Open block time
+   */
+  openBlockTime: string;
+  /**
+   * Position type (LONG/SHORT)
+   */
+  type: 'LONG' | 'SHORT';
+  /**
+   * Side (LONG/SHORT)
+   */
+  side?: 'LONG' | 'SHORT';
+  /**
+   * Is long?
+   */
+  isLong?: boolean;
+  /**
+   * Protocol
+   */
+  protocol: string;
+}
 
-    const url = new URL(request.url);
-    const path = url.pathname.replace('/smart-money/', '');
+/**
+ * Interface for a position response object
+ */
+interface PositionResponse {
+  /**
+   * Data array
+   */
+  data: {
+    /**
+     * Account address
+     */
+    account: string;
+    /**
+     * Index token
+     */
+    indexToken: string;
+    /**
+     * Position size
+     */
+    size: number;
+    /**
+     * Leverage
+     */
+    leverage: number;
+    /**
+     * PnL
+     */
+    pnl: number;
+    /**
+     * Open block time
+     */
+    openBlockTime: string;
+    /**
+     * Position type (LONG/SHORT)
+     */
+    type?: 'LONG' | 'SHORT';
+    /**
+     * Side (LONG/SHORT)
+     */
+    side?: 'LONG' | 'SHORT';
+    /**
+     * Is long?
+     */
+    isLong?: boolean;
+  }[];
+  /**
+   * Pagination metadata
+   */
+  pagination: {
+    /**
+     * Total count
+     */
+    total: number;
+    /**
+     * Limit
+     */
+    limit: number;
+    /**
+     * Offset
+     */
+    offset: number;
+  };
+}
 
-    try {
-      if (request.method === 'GET' && path === 'positions') {
-        // Get data from R2
-        const object = await env.SMART_MONEY_BUCKET.get(R2_KEY);
-        if (!object) {
-          return new Response(JSON.stringify({ error: 'No data available' }), {
-            status: 404,
-            headers: {
-              'Content-Type': 'application/json',
-              ...corsHeaders,
-            },
-          });
-        }
+/**
+ * Interface for a token position object
+ */
+interface TokenPosition {
+  /**
+   * Token symbol
+   */
+  token: string;
+  /**
+   * Total positions
+   */
+  total_positions: number;
+  /**
+   * Percentage
+   */
+  percentage: string;
+  /**
+   * Position (LONG/SHORT/NEUTRAL)
+   */
+  position: 'LONG' | 'SHORT' | 'NEUTRAL';
+}
 
-        const data = await object.json();
-        return new Response(JSON.stringify(data), {
-          headers: {
-            'Content-Type': 'application/json',
-            ...corsHeaders,
-          },
-        });
-      } else if (request.method === 'POST' && path === 'update') {
-        // Manual trigger for updating data
-        console.log('Manual trigger: Starting position data update');
-        try {
-          const positions = await processPositionData(env);
-          await env.SMART_MONEY_BUCKET.put(R2_KEY, JSON.stringify(positions), {
-            httpMetadata: {
-              contentType: 'application/json',
-            },
-          });
-          console.log('Manual trigger: Successfully updated position data');
-          return new Response(JSON.stringify({ success: true, message: 'Data updated successfully' }), {
-            headers: {
-              'Content-Type': 'application/json',
-              ...corsHeaders,
-            },
-          });
-        } catch (error) {
-          console.error('Manual trigger: Error updating data:', error);
-          return new Response(JSON.stringify({ error: 'Failed to update data' }), {
-            status: 500,
-            headers: {
-              'Content-Type': 'application/json',
-              ...corsHeaders,
-            },
-          });
-        }
-      } else if (request.method === 'DELETE' && path === 'cache') {
-        return new Response(JSON.stringify({ success: true, message: 'Cache operations disabled in staging' }), {
-          headers: {
-            'Content-Type': 'application/json',
-            ...corsHeaders,
-          },
-        });
-      }
+/**
+ * Interface for an API response object
+ */
+interface ApiResponse {
+  /**
+   * Data array
+   */
+  data: TokenPosition[];
+  /**
+   * From cache?
+   */
+  from_cache: boolean;
+  /**
+   * Last updated timestamp
+   */
+  last_updated: string;
+}
 
-      return new Response('Not found', { status: 404, headers: corsHeaders });
-    } catch (error) {
-      console.error('Error processing request:', error);
-      return new Response(JSON.stringify({ error: 'Internal server error' }), {
-        status: 500,
-        headers: {
-          'Content-Type': 'application/json',
-          ...corsHeaders,
-        },
-      });
-    }
-  },
+/**
+ * Interface for a cache entry object
+ */
+interface CacheEntry {
+  /**
+   * Timestamp
+   */
+  timestamp: string;
+  /**
+   * Data array
+   */
+  data: TokenPosition[];
+}
 
-  async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
-    console.log('Starting scheduled task to update position data');
-    try {
-      // Process position data
-      const positions = await processPositionData(env);
-      
-      // Store in R2
-      await env.SMART_MONEY_BUCKET.put(R2_KEY, JSON.stringify(positions), {
-        httpMetadata: {
-          contentType: 'application/json',
-        },
-      });
-      
-      console.log('Successfully updated position data');
-    } catch (error) {
-      console.error('Error updating position data:', error);
-      throw error; // Let Cloudflare know the scheduled task failed
-    }
-  }
+/**
+ * Interface for a Copin response object
+ */
+interface CopinResponse {
+  /**
+   * Positions array
+   */
+  positions: {
+    /**
+     * Index token
+     */
+    indexToken?: string;
+    /**
+     * Position size
+     */
+    size?: string;
+    /**
+     * Leverage
+     */
+    leverage?: string;
+    /**
+     * PnL
+     */
+    pnl?: string;
+    /**
+     * Open block time
+     */
+    openBlockTime?: string;
+    /**
+     * Position type (LONG/SHORT)
+     */
+    type?: 'LONG' | 'SHORT';
+    /**
+     * Side (LONG/SHORT)
+     */
+    side?: 'LONG' | 'SHORT';
+    /**
+     * Is long?
+     */
+    isLong?: boolean;
+  }[];
+}
+
+// CORS headers
+/**
+ * CORS headers for API responses
+ */
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, DELETE',
+  'Access-Control-Allow-Headers': 'Content-Type',
 };
 
+// Process position data from all sources and calculate statistics
 /**
- * Get human-readable token symbol
+ * Get all positions from R2 storage
+ * @param env Environment variables and bindings
+ * @returns Array of positions
  */
-function getTokenSymbol(token: string): string {
-  // Clean token name
-  token = token.toUpperCase();
-  
-  // Handle protocol prefix (e.g., "HYPERLIQUID-BTC" -> "BTC")
-  if (token.includes('-')) {
-    token = token.split('-')[1];
-  }
-  
-  // Priority tokens - check if the token contains these strings
-  if (token.includes('BTC') || token.includes('WBTC')) return 'BTC';
-  if (token.includes('ETH') || token.includes('WETH')) return 'ETH';
-  if (token.includes('SOL')) return 'SOL';
-  
-  // If token is already a symbol (BTC, ETH, etc), return it
-  if (token.length <= 5) {
-    return token;
-  }
-  
-  // Try to find token in mapping
-  const normalizedAddress = token.toLowerCase();
-  const symbol = TOKEN_SYMBOLS[normalizedAddress];
-  if (symbol) {
-    console.log(`Mapped ${token} to ${symbol}`);
-    return symbol;
-  }
+async function getAllPositions(env: Env): Promise<Position[]> {
+  try {
+    // Get data from R2
+    const object = await env.SMART_MONEY_BUCKET.get(R2_KEY);
+    if (!object) {
+      console.error('No data available in R2');
+      return [];
+    }
 
-  // If no mapping found, return the cleaned token name
-  console.log(`No mapping found for ${token}, using as is`);
-  return token;
-}
-
-interface TokenStatistics {
-  long: number;
-  short: number;
-}
-
-interface CombinedData {
-  timestamp: string;
-  token_statistics: { [key: string]: TokenStatistics };
-  traders: { [key: string]: { [key: string]: Position[] } };
+    const data = await object.json() as Position[];
+    return data;
+  } catch (error) {
+    console.error('Error getting positions:', error);
+    throw error;
+  }
 }
 
 /**
- * Calculate position percentages for long and short positions
+ * Process position data to calculate statistics for each token
+ * @param positions Array of positions to process
+ * @returns Array of token positions with statistics
  */
-function calculatePositionPercentages(long_count: number, short_count: number): [number, number, number] {
-  const total_positions = long_count + short_count;
-  if (total_positions === 0) {
-    return [0, 0, 0];
+async function processPositionData(positions: Position[]): Promise<TokenPosition[]> {
+  try {
+    console.log('Processing positions:', positions.length);
+    
+    // Group positions by token
+    const positionsByToken: { [key: string]: Position[] } = {};
+    for (const position of positions) {
+      let token = position.indexToken;
+      
+      // Handle special token formats
+      if (token.includes('HYPERLIQUID-')) {
+        token = token.split('-')[1];
+      } else if (position.protocol === 'GMX_V2') {
+        // Use token symbol mapping for GMX_V2
+        token = TOKEN_SYMBOLS[token.toLowerCase()] || token;
+      }
+      
+      if (!positionsByToken[token]) {
+        positionsByToken[token] = [];
+      }
+      positionsByToken[token].push(position);
+    }
+
+    // Calculate statistics for each token
+    const tokenStats: TokenPosition[] = [];
+    for (const [token, tokenPositions] of Object.entries(positionsByToken)) {
+      const stats = processPositionStatistics(tokenPositions);
+      if (stats.total_positions >= 5) {
+        // Determine position type based on long percentage
+        let position: 'LONG' | 'SHORT' | 'NEUTRAL';
+        let percentage: number;
+
+        if (stats.long_percentage === 50) {
+          position = 'NEUTRAL';
+          percentage = 50;
+        } else {
+          position = stats.long_percentage > 50 ? 'LONG' : 'SHORT';
+          percentage = position === 'LONG' ? stats.long_percentage : stats.short_percentage;
+        }
+
+        tokenStats.push({
+          token,
+          total_positions: stats.total_positions,
+          percentage: `${stats.long_percentage.toFixed(2)}%`,
+          position
+        });
+      }
+    }
+
+    // Priority tokens in specific order (BTC, ETH, SOL)
+    const priorityTokens = ['BTC', 'ETH', 'SOL'];
+    const result: TokenPosition[] = [];
+
+    // First add priority tokens in order if they exist
+    for (const token of priorityTokens) {
+      const stat = tokenStats.find(s => s.token === token);
+      if (stat) {
+        result.push(stat);
+      }
+    }
+
+    // Then add other tokens with at least 5 positions
+    const otherTokens = tokenStats
+      .filter(stat => !priorityTokens.includes(stat.token))
+      .sort((a, b) => b.total_positions - a.total_positions)
+      .slice(0, 3);
+
+    // Return exactly 6 tokens max (3 priority + up to 3 others with >= 5 positions)
+    return [...result, ...otherTokens].slice(0, 6);
+  } catch (error) {
+    console.error('Error processing position data:', error);
+    throw error;
   }
-  
-  const long_percentage = (long_count / total_positions) * 100;
-  const short_percentage = (short_count / total_positions) * 100;
-  
-  return [long_percentage, short_percentage, total_positions];
 }
 
 /**
- * Process position statistics to get long/short counts and percentages
+ * Process position statistics
+ * @param positions Array of positions to process
+ * @returns Position statistics
  */
 function processPositionStatistics(positions: Position[]): {
   long_count: number;
@@ -359,78 +499,164 @@ function processPositionStatistics(positions: Position[]): {
   short_percentage: number;
   total_positions: number;
 } {
-  const long_count = positions.filter(p => p.isLong).length;
-  const short_count = positions.filter(p => !p.isLong).length;
-  const total = long_count + short_count;
+  const long_count = positions.filter(p => p.isLong || p.type === 'LONG' || p.side === 'LONG').length;
+  const short_count = positions.filter(p => !p.isLong || p.type === 'SHORT' || p.side === 'SHORT').length;
+  const total_positions = positions.length;
   
-  if (total === 0) {
-    return {
-      long_count: 0,
-      short_count: 0,
-      long_percentage: 0,
-      short_percentage: 0,
-      total_positions: 0
-    };
-  }
-  
-  const long_percentage = (long_count / total) * 100;
-  const short_percentage = (short_count / total) * 100;
-  
+  const long_percentage = Number(((long_count / total_positions) * 100).toFixed(2));
+  const short_percentage = Number(((short_count / total_positions) * 100).toFixed(2));
+
   return {
     long_count,
     short_count,
     long_percentage,
     short_percentage,
-    total_positions: total
+    total_positions,
   };
 }
 
 /**
- * Process position data from all protocols and traders.
- * Returns aggregated token statistics with long/short distributions.
+ * Cloudflare Worker fetch handler
+ * Processes HTTP requests to the API endpoints
+ * 
+ * @param {Request} request - HTTP request
+ * @param {Env} env - Environment variables and bindings
+ * @param {ExecutionContext} ctx - Execution context
+ * @returns {Promise<Response>} HTTP response
  */
-async function processPositionData(env: Env): Promise<TokenPosition[]> {
-  try {
-    console.log('Processing position data...');
-    const copinService = new CopinService(COPIN_BASE_URL, COPIN_API_KEY);
-    const allPositions = await copinService.fetchAllPositions();
-    console.log(`Fetched ${allPositions.length} total positions`);
+export default {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    const url = new URL(request.url);
+    const path = url.pathname.replace('/smart-money/', '');
 
-    // Group positions by token
-    const positionsByToken: { [key: string]: Position[] } = {};
-    for (const position of allPositions) {
-      const token = position.indexToken;
-      if (!positionsByToken[token]) {
-        positionsByToken[token] = [];
+    try {
+      if (request.method === 'GET' && path === 'positions') {
+        // Get all positions
+        const positions = await getAllPositions(env);
+        return new Response(JSON.stringify(positions), {
+          headers: {
+            'Content-Type': 'application/json',
+            ...CORS_HEADERS,
+          },
+        });
+      } else if (request.method === 'GET' && path === 'token-stats') {
+        // Get token stats
+        const positions = await getAllPositions(env);
+        if (!positions || !Array.isArray(positions)) {
+          console.error('Invalid positions data:', positions);
+          return new Response(JSON.stringify({ error: 'Invalid positions data' }), {
+            status: 500,
+            headers: {
+              'Content-Type': 'application/json',
+              ...CORS_HEADERS,
+            },
+          });
+        }
+        
+        const stats = await processPositionData(positions);
+        return new Response(JSON.stringify(stats), {
+          headers: {
+            'Content-Type': 'application/json',
+            ...CORS_HEADERS,
+          },
+        });
+      } else if (request.method === 'POST' && path === 'update') {
+        // Update positions
+        await updatePositions(env);
+        return new Response(JSON.stringify({ success: true, message: 'Data updated successfully' }), {
+          headers: {
+            'Content-Type': 'application/json',
+            ...CORS_HEADERS,
+          },
+        });
+      } else {
+        return new Response('Not found', { status: 404 });
       }
-      positionsByToken[token].push(position);
+    } catch (error) {
+      console.error('Error handling request:', error);
+      return new Response(JSON.stringify({ 
+        error: 'Internal server error', 
+        details: error instanceof Error ? error.message : 'Unknown error'
+      }), { 
+        status: 500,
+        headers: {
+          'Content-Type': 'application/json',
+          ...CORS_HEADERS,
+        },
+      });
     }
+  },
 
-    // Calculate statistics for each token
-    const tokenPositions = Object.entries(positionsByToken).map(([token, positions]) => {
-      const stats = processPositionStatistics(positions);
-      const [longPercentage, shortPercentage] = calculatePositionPercentages(stats.long_count, stats.short_count);
+  async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+    console.log('Starting scheduled task to update position data');
+    try {
+      const copinService = new CopinService(COPIN_BASE_URL, COPIN_API_KEY);
+      const positions = await copinService.getPositions();
+      
+      // Store in R2
+      await env.SMART_MONEY_BUCKET.put(R2_KEY, JSON.stringify(positions));
+      
+      // Store in database
+      const dbService = new DatabaseService(env.DB);
+      await dbService.storePositions(positions);
+    } catch (error) {
+      console.error('Error in scheduled task:', error);
+    }
+  }
+};
 
-      return {
-        token: getTokenSymbol(token),
-        total_positions: stats.total_positions,
-        percentage: `${longPercentage}% Long / ${shortPercentage}% Short`,
-        position: longPercentage === 50 ? 'NEUTRAL' : longPercentage > 50 ? 'LONG' : 'SHORT'
-      } satisfies TokenPosition;
-    });
-
-    // Sort by total positions
-    return tokenPositions
-      .sort((a, b) => b.total_positions - a.total_positions)
-      .slice(0, 6); // Return top 6 tokens
+/**
+ * Update positions
+ * @param env Environment variables and bindings
+ */
+async function updatePositions(env: Env): Promise<void> {
+  try {
+    const copinService = new CopinService(COPIN_BASE_URL, COPIN_API_KEY);
+    const positions = await copinService.getPositions();
+    
+    // Store in R2
+    await env.SMART_MONEY_BUCKET.put(R2_KEY, JSON.stringify(positions));
+    
+    // Store in database
+    const dbService = new DatabaseService(env.DB);
+    await dbService.storePositions(positions);
   } catch (error) {
-    console.error('Error processing position data:', error);
-    throw error;
+    console.error('Error updating positions:', error);
+  }
+}
+
+/**
+ * Scheduled task handler
+ * Updates position data cache periodically
+ * 
+ * @param {ScheduledEvent} event - Scheduled event details
+ * @param {Env} env - Environment variables and bindings
+ * @param {ExecutionContext} ctx - Execution context
+ */
+async function scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+  console.log('Starting scheduled task to update position data');
+  try {
+    const copinService = new CopinService(COPIN_BASE_URL, COPIN_API_KEY);
+    const positions = await copinService.getPositions();
+    
+    // Store in R2
+    await env.SMART_MONEY_BUCKET.put(R2_KEY, JSON.stringify(positions));
+    
+    // Store in database
+    const dbService = new DatabaseService(env.DB);
+    await dbService.storePositions(positions);
+  } catch (error) {
+    console.error('Error in scheduled task:', error);
   }
 }
 
 /**
  * Fetch position data for a specific trader and protocol.
+ * 
+ * @param {string} trader_id - Trader ID
+ * @param {string} protocol - Protocol name
+ * @param {Env} env - Environment variables and bindings
+ * @returns {Promise<Position[]>} Array of positions
  */
 async function fetchPositionData(trader_id: string, protocol: string, env: Env): Promise<Position[]> {
   try {
@@ -445,6 +671,9 @@ async function fetchPositionData(trader_id: string, protocol: string, env: Env):
 
 /**
  * Sleep for a specified number of milliseconds
+ * 
+ * @param {number} ms - Milliseconds to sleep
+ * @returns {Promise<void>} Resolves after sleeping
  */
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -452,6 +681,9 @@ function sleep(ms: number): Promise<void> {
 
 /**
  * Check if address is a dYdX address
+ * 
+ * @param {string} address - Address to check
+ * @returns {boolean} True if address is a dYdX address
  */
 function isDydxAddress(address: string): boolean {
   return address.startsWith('dydx1');

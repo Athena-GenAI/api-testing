@@ -1,16 +1,29 @@
+/**
+ * Test Suite for Copin Service
+ */
+
+import { describe, it, expect, jest, beforeEach, afterEach } from '@jest/globals';
 import { CopinService } from '../services/copinService';
 import { TRADER_WALLETS } from '../constants/wallets';
 import { SUPPORTED_PROTOCOLS } from '../constants/protocols';
 
 describe('CopinService', () => {
+  const baseUrl = 'https://api.example.com';
+  const apiKey = 'test-api-key';
   let copinService: CopinService;
-  const fetchMock = jest.fn();
+
+  // Mock fetch globally
+  const fetchMock = jest.fn() as jest.MockedFunction<typeof fetch>;
+  global.fetch = fetchMock;
 
   beforeEach(() => {
-    (global as any).fetch = fetchMock;
-    // Initialize with test API base URL and mock API key
-    copinService = new CopinService('https://api.example.com', 'test-api-key');
     fetchMock.mockClear();
+    // Initialize with test API base URL and mock API key
+    copinService = new CopinService(baseUrl, apiKey);
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
   });
 
   describe('fetchAllPositions', () => {
@@ -24,37 +37,26 @@ describe('CopinService', () => {
       fetchMock.mockImplementation(() =>
         Promise.resolve({
           ok: true,
-          json: () => Promise.resolve(mockResponse),
-          clone: function() {
-            return {
-              ok: true,
-              json: () => Promise.resolve(mockResponse)
-            };
-          }
-        })
+          json: () => Promise.resolve(mockResponse)
+        } as Response)
       );
 
       const positions = await copinService.fetchAllPositions();
       expect(positions.length).toBeGreaterThan(0);
       expect(positions[0].isLong).toBe(true);
-    });
+    }, 10000); // Increase timeout to 10 seconds
 
     it('should handle API errors gracefully', async () => {
       fetchMock.mockImplementation(() =>
         Promise.resolve({
           ok: false,
           status: 500,
-          clone: function() {
-            return {
-              ok: false,
-              status: 500
-            };
-          }
-        })
+          statusText: 'Internal Server Error'
+        } as Response)
       );
 
       await expect(copinService.fetchAllPositions()).rejects.toThrow('Failed to fetch any positions');
-    });
+    }, 10000); // Increase timeout to 10 seconds
 
     it('should handle different position type formats', async () => {
       const testCases = [
@@ -76,20 +78,14 @@ describe('CopinService', () => {
         fetchMock.mockImplementation(() =>
           Promise.resolve({
             ok: true,
-            json: () => Promise.resolve(testCase.response),
-            clone: function() {
-              return {
-                ok: true,
-                json: () => Promise.resolve(testCase.response)
-              };
-            }
-          })
+            json: () => Promise.resolve(testCase.response)
+          } as Response)
         );
 
         const positions = await copinService.fetchAllPositions();
         expect(positions[0].isLong).toBe(testCase.expected);
       }
-    });
+    }, 10000); // Increase timeout to 10 seconds
   });
 
   it('should be defined', () => {

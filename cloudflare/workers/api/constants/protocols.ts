@@ -4,18 +4,29 @@
  */
 export const SUPPORTED_PROTOCOLS = [
   "GMX",
+  "GMX_V2",
+  "GMX_AVAX",
+  "GMX_V2_AVAX",
   "KWENTA",
   "POLYNOMIAL",
-  "GMX_V2",
+  "POLYNOMIAL_L2",
   "GNS",
+  "GNS_POLY",
+  "GNS_BASE",
+  "GNS_APE",
   "HYPERLIQUID",
   "VERTEX_ARB",
-  "SYNTHETIX",
+  "SYNTHETIX_V3",
+  "SYNTHETIX_V3_ARB",
   "DYDX",
-  "GMX_AVAX",
-  "POLYNOMIAL_L2",
-  "GNS_POLY",
-  "GNS_BASE"
+  "PERENNIAL_ARB",
+  "BSX_BASE",
+  "AEVO",
+  "VELA_ARB",
+  "HMX_ARB",
+  "LEVEL_ARB",
+  "LEVEL_BNB",
+  "MUX_ARB"
 ] as const;
 
 export type Protocol = typeof SUPPORTED_PROTOCOLS[number];

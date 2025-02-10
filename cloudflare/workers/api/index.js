@@ -7,7 +7,7 @@
 
 // Constants
 const CACHE_KEY = 'smart_money_positions';
-const CACHE_TTL = 60 * 60 * 3; // 3 hours in seconds
+const CACHE_TTL = 60 * 60 * 1; // 1 hour in seconds
 const COPIN_BASE_URL = "https://api.copin.io";
 const SUPPORTED_PROTOCOLS = [
   'GMX', 'KWENTA', 'POLYNOMIAL', 'POLYNOMIAL_L2', 'GMX_V2_AVAX', 'GMX_V2',

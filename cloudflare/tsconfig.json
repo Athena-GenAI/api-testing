@@ -1,21 +1,23 @@
 {
   "compilerOptions": {
     "target": "es2021",
-    "lib": ["es2021"],
-    "module": "es2022",
+    "lib": ["es2021", "dom"],
+    "module": "commonjs",
     "moduleResolution": "node",
-    "types": ["@cloudflare/workers-types", "@types/jest"],
+    "types": ["@cloudflare/workers-types", "@types/jest", "node"],
     "noEmit": true,
     "isolatedModules": true,
     "allowSyntheticDefaultImports": true,
     "forceConsistentCasingInFileNames": true,
     "strict": true,
     "skipLibCheck": true,
-    "baseUrl": "./workers",
+    "baseUrl": ".",
     "paths": {
-      "*": ["*"]
-    }
+      "@/*": ["workers/api/*"]
+    },
+    "esModuleInterop": true,
+    "resolveJsonModule": true
   },
-  "include": ["workers/**/*"],
+  "include": ["workers/**/*", "tests/**/*"],
   "exclude": ["node_modules", "dist"]
 }
