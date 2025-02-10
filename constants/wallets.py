@@ -1,4 +1,6 @@
 # List of smart money perpetual trader wallets
+# We need to check to make sure that positions are open in the wallets.
+# if the wallets don't have open positions we can ignore them.
 TRADER_WALLETS = [
     "0x0171d947ee6ce0f487490bD4f8D89878FF2d88BA",
     "0x077F7a7b115C989D07f8D8efb16A2C2747B4270d",

@@ -1,0 +1,44 @@
+name = "smart-money-api"
+main = "workers/api/index.ts"
+compatibility_date = "2025-02-06"
+
+# KV Namespace bindings
+kv_namespaces = [
+  { binding = "SMART_MONEY_CACHE", id = "4146d86894e74779a14b83e2124c4194", preview_id = "4146d86894e74779a14b83e2124c4194" }
+]
+
+# R2 bucket binding
+[[r2_buckets]]
+binding = 'SMART_MONEY_BUCKET'
+bucket_name = 'smart-money-data'
+preview_bucket_name = 'smart-money-data-dev'
+
+[build]
+command = "npm run build"
+
+[triggers]
+crons = ["0 */2 * * *"]  # Run every 2 hours
+
+[env.production]
+workers_dev = false
+route = "api.0xathena.ai/smart-money/*"
+kv_namespaces = [
+  { binding = "SMART_MONEY_CACHE", id = "4146d86894e74779a14b83e2124c4194", preview_id = "4146d86894e74779a14b83e2124c4194" }
+]
+[[env.production.r2_buckets]]
+binding = 'SMART_MONEY_BUCKET'
+bucket_name = 'smart-money-data'
+
+[env.staging]
+workers_dev = true
+route = "api.0xathena.ai/smart-money/*"
+kv_namespaces = [
+  { binding = "SMART_MONEY_CACHE", id = "4146d86894e74779a14b83e2124c4194", preview_id = "4146d86894e74779a14b83e2124c4194" }
+]
+[[env.staging.r2_buckets]]
+binding = 'SMART_MONEY_BUCKET'
+bucket_name = 'smart-money-data-dev'
+
+# wrangler.toml (wrangler v3.88.0^)
+[observability.logs]
+enabled = true
