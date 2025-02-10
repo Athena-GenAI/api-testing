@@ -525,22 +525,59 @@ function processPositionStatistics(positions: Position[]): {
  */
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-    const url = new URL(request.url);
-    const path = url.pathname.replace('/smart-money/', '');
-    
-    // Only check cache in production environment
-    const isDev = url.hostname.includes('dev-api') || url.hostname.includes('localhost');
-    let cachedData = null;
-    
-    if (!isDev) {
-      const today = new Date().toISOString().split('T')[0];
-      cachedData = await env.SMART_MONEY_CACHE.get(`positions:${today}`, 'json');
-    }
+    try {
+      const url = new URL(request.url);
+      const path = url.pathname.replace('/smart-money/', '');
+      
+      // Only check cache in production environment
+      const isDev = url.hostname.includes('dev-api') || url.hostname.includes('localhost');
+      console.log(`Environment: ${isDev ? 'development' : 'production'}`);
+      
+      let cachedData = null;
+      
+      if (!isDev) {
+        const today = new Date().toISOString().split('T')[0];
+        console.log('Checking cache for date:', today);
+        cachedData = await env.SMART_MONEY_CACHE.get(`positions:${today}`, 'json');
+        console.log('Cache hit:', !!cachedData);
+      }
 
-    if (cachedData) {
+      if (cachedData) {
+        console.log('Returning cached data');
+        return new Response(JSON.stringify({
+          data: cachedData,
+          from_cache: true,
+          last_updated: new Date().toISOString()
+        }), {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+            ...CORS_HEADERS,
+          },
+        });
+      }
+
+      console.log('Fetching fresh data from Copin API');
+      const copinService = new CopinService(COPIN_BASE_URL, COPIN_API_KEY);
+      const positions = await copinService.getPositions();
+      console.log(`Fetched ${positions.length} positions`);
+      
+      const processedData = await processPositionData(positions);
+      console.log(`Processed ${processedData.length} tokens`);
+
+      // Only cache in production environment
+      if (!isDev) {
+        console.log('Updating cache with fresh data');
+        const today = new Date().toISOString().split('T')[0];
+        await env.SMART_MONEY_CACHE.put(
+          `positions:${today}`,
+          JSON.stringify(processedData)
+        );
+      }
+
       return new Response(JSON.stringify({
-        data: cachedData,
-        from_cache: true,
+        data: processedData,
+        from_cache: false,
         last_updated: new Date().toISOString()
       }), {
         status: 200,
@@ -549,57 +586,13 @@ export default {
           ...CORS_HEADERS,
         },
       });
-    }
-
-    try {
-      if (request.method === 'GET' && path === 'positions') {
-        // Get all positions
-        const positions = await getAllPositions(env);
-        return new Response(JSON.stringify(positions), {
-          headers: {
-            'Content-Type': 'application/json',
-            ...CORS_HEADERS,
-          },
-        });
-      } else if (request.method === 'GET' && path === 'token-stats') {
-        // Get token stats
-        const positions = await getAllPositions(env);
-        if (!positions || !Array.isArray(positions)) {
-          console.error('Invalid positions data:', positions);
-          return new Response(JSON.stringify({ error: 'Invalid positions data' }), {
-            status: 500,
-            headers: {
-              'Content-Type': 'application/json',
-              ...CORS_HEADERS,
-            },
-          });
-        }
-        
-        const stats = await processPositionData(positions);
-        return new Response(JSON.stringify(stats), {
-          headers: {
-            'Content-Type': 'application/json',
-            ...CORS_HEADERS,
-          },
-        });
-      } else if (request.method === 'POST' && path === 'update') {
-        // Update positions
-        await updatePositions(env);
-        return new Response(JSON.stringify({ success: true, message: 'Data updated successfully' }), {
-          headers: {
-            'Content-Type': 'application/json',
-            ...CORS_HEADERS,
-          },
-        });
-      } else {
-        return new Response('Not found', { status: 404 });
-      }
     } catch (error) {
-      console.error('Error handling request:', error);
-      return new Response(JSON.stringify({ 
-        error: 'Internal server error', 
-        details: error instanceof Error ? error.message : 'Unknown error'
-      }), { 
+      console.error('Error processing request:', error);
+      return new Response(JSON.stringify({
+        error: 'Internal server error',
+        message: error.message,
+        stack: isDev ? error.stack : undefined
+      }), {
         status: 500,
         headers: {
           'Content-Type': 'application/json',
@@ -650,6 +643,7 @@ async function updatePositions(env: Env): Promise<void> {
     const isDev = process.env.NODE_ENV === 'development';
     
     if (!isDev) {
+      console.log('Updating cache with fresh data');
       const processedPositions = await processPositionData(positions);
       await env.SMART_MONEY_CACHE.put(
         `positions:${new Date().toISOString().split('T')[0]}`,
