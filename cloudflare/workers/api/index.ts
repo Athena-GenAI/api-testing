@@ -525,13 +525,14 @@ function processPositionStatistics(positions: Position[]): {
  */
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    // Only check cache in production environment
+    const isDev = new URL(request.url).hostname.includes('dev-api') || 
+                 new URL(request.url).hostname.includes('localhost');
+    console.log(`Environment: ${isDev ? 'development' : 'production'}`);
+    
     try {
       const url = new URL(request.url);
       const path = url.pathname.replace('/smart-money/', '');
-      
-      // Only check cache in production environment
-      const isDev = url.hostname.includes('dev-api') || url.hostname.includes('localhost');
-      console.log(`Environment: ${isDev ? 'development' : 'production'}`);
       
       let cachedData = null;
       
