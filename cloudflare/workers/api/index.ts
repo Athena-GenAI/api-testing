@@ -526,7 +526,7 @@ function processPositionStatistics(positions: Position[]): {
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     // Only check cache in production environment
-    const isDev = new URL(request.url).hostname.includes('dev-api') || 
+    const isDev = request.url.includes('workers.dev') || 
                  new URL(request.url).hostname.includes('localhost');
     console.log(`Environment: ${isDev ? 'development' : 'production'}`);
     
