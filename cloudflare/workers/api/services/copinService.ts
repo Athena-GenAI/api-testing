@@ -185,31 +185,12 @@ export class CopinService {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-<<<<<<< Updated upstream
-            'X-API-Key': this.apiKey
-=======
             'Authorization': `Bearer ${this.apiKey}`,
             'x-api-key': this.apiKey
->>>>>>> Stashed changes
           },
           body: JSON.stringify(body)
         });
 
-<<<<<<< Updated upstream
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const data: CopinApiResponse = await response.json();
-        
-        // Process positions
-        const processedPositions = this.processPositions(data.data, protocol);
-        positions.push(...processedPositions);
-
-        // Update pagination
-        offset += limit;
-        hasMore = offset < data.meta.total;
-=======
         console.log(`[${protocol}] Response status:`, response.status);
         if (!response.ok) {
           const errorText = await response.text();
@@ -244,22 +225,13 @@ export class CopinService {
         if (hasMore) {
           await new Promise(resolve => setTimeout(resolve, 100));
         }
->>>>>>> Stashed changes
       }
 
       return positions;
     } catch (error) {
-<<<<<<< Updated upstream
-      console.error(`Error fetching positions for ${traderId} on ${protocol}:`, error);
-      throw error;
-    }
-
-    return positions;
-=======
       console.error(`[${protocol}] Error fetching positions for ${traderId}:`, error);
       return [];
     }
->>>>>>> Stashed changes
   }
 
   /**
@@ -416,4 +388,37 @@ export async function getAllPositions(env: Env): Promise<Position[]> {
     console.error('Error getting positions from R2:', error);
     throw error;
   }
+}
+
+/**
+ * Process positions for a specific token
+ * @param positions Array of positions for a token
+ * @returns Processed token statistics
+ */
+function processTokenPositions(positions: Position[]): {
+  long_count: number;
+  short_count: number;
+  total_positions: number;
+  long_percentage: number;
+} {
+  const stats = {
+    long_count: 0,
+    short_count: 0,
+    total_positions: positions.length,
+    long_percentage: 0
+  };
+
+  // Count long and short positions
+  for (const position of positions) {
+    if (position.isLong) {
+      stats.long_count++;
+    } else {
+      stats.short_count++;
+    }
+  }
+
+  // Calculate long percentage
+  stats.long_percentage = (stats.long_count / stats.total_positions) * 100;
+
+  return stats;
 }
