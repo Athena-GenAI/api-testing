@@ -5,6 +5,7 @@
  * across various DeFi protocols. It aggregates position data from the Copin API and provides
  * insights into market sentiment through position analysis.
  * 
+<<<<<<< Updated upstream
  * Key Features:
  * - Real-time position tracking for major cryptocurrencies
  * - Smart money wallet analysis
@@ -18,6 +19,12 @@
  * - R2 for persistent storage
  * - KV for caching
  * - Scheduled updates via cron triggers
+=======
+ * Features:
+ * - Tracks positions for BTC, ETH, SOL, and other tokens
+ * - Identifies market anomalies (extreme long/short positions)
+ * - Updates data automatically via cron trigger
+>>>>>>> Stashed changes
  * 
  * @module SmartMoneyAPI
  * @version 1.0.0
@@ -117,6 +124,26 @@ const TOKEN_SYMBOLS: { [key: string]: string } = {
   '0x6853ea96ff216fab11d2d930ce3c508556a4bdc4': 'GRIFFAIN_V2'
 };
 
+<<<<<<< Updated upstream
+=======
+// Token symbol mapping
+const TOKEN_SYMBOLS_LOWERCASE: { [key: string]: string } = {
+  'wbtc': 'BTC',
+  'weth': 'ETH',
+  'wsol': 'SOL',
+  'btc': 'BTC',
+  'eth': 'ETH',
+  'sol': 'SOL',
+  'bitcoin': 'BTC',
+  'ethereum': 'ETH',
+  'solana': 'SOL',
+  'wrapped bitcoin': 'BTC',
+  'wrapped ethereum': 'ETH',
+  'wrapped solana': 'SOL',
+};
+
+// List of smart money perpetual trader wallets
+>>>>>>> Stashed changes
 /**
  * Smart Money Wallets
  * Curated list of addresses known for profitable trading
@@ -128,50 +155,6 @@ const TRADER_WALLETS = [
   "0x077F7a7b115C989D07f8D8efb16A2C2747B4270d",
   "0x0A9Cd7e213960A1d2Ac6802e8D3E3A9E36E3F45c",
   "0x0b00366fBF7037E9d75E4A569ab27dAB84759302",
-  "0x0c2253153370BF3A26970df7B6219442AF975783",
-  "0x0D5550d52428E7e3175bfc9550207e4ad3859b17",
-  "0x0e3bec1de41d7d1875Ea175f9b6123B4a7E6E6a3",
-  "0x1081D3b50B6e6A4A2a5eB6D7e3E6e994530c5C5B",
-  "0x1168D6a159B1b6b9002ef0E8c40004aC149663B7",
-  "0x11Df180d9bdCFbC22443285E72C7C1C9F8EFD862",
-  "0x1249CDA86774Bc170CAb843437DD37484F173ca8",
-  "0x12F31B73D812dD89f22865AE726fD00f21F9CE57",
-  "0x13B835Ba26d3c6B4C5C7Aa3741f5c94d6A5C8C65",
-  "0x13f0d0a343A11Ad5E14943EA942A89E6132F7440",
-  "0x14B50eC2f40A99C63E4c9Aa40B238D6A0b455f6e",
-  "0x15A1fF7907A0Ac3BCf617294e8F36b4c92c9BF60",
-  "0x15B7D803bE17e920a261D8A5906431787F2497EF",
-  "0x15F8afe8e52Bd59B0958A39e21307a8495901E61",
-  "0x1627C71C1F3f1A3d51f33e8e01E144F40a6846e9",
-  "0x16a7ECF2c27Cb367Df36d39e389e66B42000E0dF",
-  "0x16f9Af0B94abdE1B3Cf4f5F7f8CCBa7Df7d07d15",
-  "0x1714f9A0e1C7B28Fc2F8EA27C99F15c9F5c1B8B0",
-  "0x17B9f6c5f7f39563DF4711cD7Ba83B8A7cE5b6E8",
-  "0x17D3F3E86C3d9A3Bb8f2D1f3F8B2E2f2E2f2E2f2",
-  "0x1A1B1c1D1E1F1a1b1c1d1e1f1A1B1C1D1E1F1a1b",
-  "0x1B1c1D1E1F1a1B1c1D1E1F1a1B1c1D1E1F1a1B1c",
-  "0x1C1D1E1F1a1B1c1D1E1F1a1B1c1D1E1F1a1B1c1D",
-  "0x1D1E1F1a1B1c1D1E1F1a1B1c1D1E1F1a1B1c1D1E",
-  "0x1E1F1a1B1c1D1E1F1a1B1c1D1E1F1a1B1c1D1E1F",
-  "0x1F1a1B1c1D1E1F1a1B1c1D1E1F1a1B1c1D1E1F1a",
-  "0x1a1B1c1D1E1F1a1B1c1D1E1F1a1B1c1D1E1F1a1B",
-  "0x1b1C1D1E1F1a1B1c1D1E1F1a1B1c1D1E1F1a1B1c",
-  "0x1c1D1E1F1a1B1c1D1E1F1a1B1c1D1E1F1a1B1c1D",
-  "0x1d1E1F1a1B1c1D1E1F1a1B1c1D1E1F1a1B1c1D1E",
-  "0x1e1F1a1B1c1D1E1F1a1B1c1D1E1F1a1B1c1D1E1F",
-  "0x1f1a1B1c1D1E1F1a1B1c1D1E1F1a1B1c1D1E1F1a",
-  "0x2A2B2c2D2E2F2a2B2c2D2E2F2a2B2c2D2E2F2a2B",
-  "0x2B2c2D2E2F2a2B2c2D2E2F2a2B2c2D2E2F2a2B2c",
-  "0x2C2D2E2F2a2B2c2D2E2F2a2B2c2D2E2F2a2B2c2D",
-  "0x2D2E2F2a2B2c2D2E2F2a2B2c2D2E2F2a2B2c2D2E",
-  "0x2E2F2a2B2c2D2E2F2a2B2c2D2E2F2a2B2c2D2E2F",
-  "0x2F2a2B2c2D2E2F2a2B2c2D2E2F2a2B2c2D2E2F2a",
-  "0x2a2B2c2D2E2F2a2B2c2D2E2F2a2B2c2D2E2F2a2B",
-  "0x2b2C2D2E2F2a2B2c2D2E2F2a2B2c2D2E2F2a2B2c",
-  "0x2c2D2E2F2a2B2c2D2E2F2a2B2c2D2E2F2a2B2c2D",
-  "0x2d2E2F2a2B2c2D2E2F2a2B2c2D2E2F2a2B2c2D2E",
-  "0x2e2F2a2B2c2D2E2F2a2B2c2D2E2F2a2B2c2D2E2F",
-  "0x2f2a2B2c2D2E2F2a2B2c2D2E2F2a2B2c2D2E2F2a",
   "0xB6860393Ade5CD3766E47e0B031A0F4C33FD48a4",
   "0xDAf845cEbBB9cAd08EB7497BB624329D086cD32A",
   "0x4535B3157eFa05466D5095309C6F12FE3be237dc"
@@ -795,10 +778,15 @@ async function getAllPositions(env: Env): Promise<Position[]> {
  */
 async function processPositionData(positions: Position[]): Promise<TokenPosition[]> {
   try {
+<<<<<<< Updated upstream
+=======
+    console.log('Starting to process positions:', positions.length);
+    
+>>>>>>> Stashed changes
     // Group positions by token
     const positionsByToken: { [key: string]: Position[] } = {};
     for (const position of positions) {
-      let token = position.indexToken;
+      let token = position.indexToken.toUpperCase(); // Ensure uppercase
       
       // Handle special token formats
       if (token.includes('HYPERLIQUID-')) {
@@ -807,8 +795,17 @@ async function processPositionData(positions: Position[]): Promise<TokenPosition
         token = TOKEN_SYMBOLS[token.toLowerCase()] || token;
       }
       
+<<<<<<< Updated upstream
       // Remove $ prefix and standardize format
       token = token.replace('$', '').toUpperCase();
+=======
+      // Clean up token names
+      token = token.replace(/^WBTC$/, 'BTC')
+                  .replace(/^WETH$/, 'ETH')
+                  .replace(/^WSOL$/, 'SOL');
+      
+      console.log(`Processing position for token ${token} from ${position.protocol}`);
+>>>>>>> Stashed changes
       
       if (!positionsByToken[token]) {
         positionsByToken[token] = [];
@@ -816,28 +813,58 @@ async function processPositionData(positions: Position[]): Promise<TokenPosition
       positionsByToken[token].push(position);
     }
 
+    console.log('Grouped positions by token:', Object.keys(positionsByToken));
+
     // Calculate statistics for each token
     const tokenStats: TokenPosition[] = [];
     for (const [token, tokenPositions] of Object.entries(positionsByToken)) {
+      console.log(`\nProcessing stats for ${token}:`);
+      console.log(`Total positions: ${tokenPositions.length}`);
+      
       const stats = processPositionStatistics(tokenPositions);
+      console.log('Position stats:', stats);
+      
+      // Only include tokens with at least 5 positions
       if (stats.total_positions >= 5) {
         // Determine position type based on long percentage
         let position: 'LONG' | 'SHORT' | 'NEUTRAL';
+<<<<<<< Updated upstream
         
         if (stats.long_percentage === 50) {
           position = 'NEUTRAL';
         } else {
           position = stats.long_percentage > 50 ? 'LONG' : 'SHORT';
+=======
+        let percentage = stats.long_percentage;
+
+        if (percentage === 50) {
+          position = 'NEUTRAL';
+        } else if (percentage > 50) {
+          position = 'LONG';
+        } else {
+          position = 'SHORT';
+          percentage = 100 - percentage; // For SHORT positions, use the short percentage
+>>>>>>> Stashed changes
         }
 
-        tokenStats.push({
-          token,
+        const tokenStat = {
+          token: token.toUpperCase(), // Ensure uppercase
           total_positions: stats.total_positions,
+<<<<<<< Updated upstream
           percentage: `${Math.round(stats.long_percentage)}%`,
+=======
+          percentage: `${Math.round(percentage)}%`, // Round to whole number
+>>>>>>> Stashed changes
           position
-        });
+        };
+        console.log('Adding token stat:', tokenStat);
+        tokenStats.push(tokenStat);
+      } else {
+        console.log(`Skipping ${token} - insufficient positions (${stats.total_positions} < 5)`);
       }
     }
+
+    console.log('\nAll token stats before filtering:', tokenStats);
 
     // Priority tokens in specific order (BTC, ETH, SOL)
     const priorityTokens = ['BTC', 'ETH', 'SOL'];
@@ -847,18 +874,25 @@ async function processPositionData(positions: Position[]): Promise<TokenPosition
     for (const token of priorityTokens) {
       const stat = tokenStats.find(s => s.token === token);
       if (stat) {
+        console.log(`Adding priority token ${token}:`, stat);
         result.push(stat);
+      } else {
+        console.log(`Priority token ${token} not found in stats`);
       }
     }
 
-    // Then add other tokens with at least 5 positions
+    // Then add other tokens with at least 5 positions, sorted by total positions
     const otherTokens = tokenStats
       .filter(stat => !priorityTokens.includes(stat.token))
       .sort((a, b) => b.total_positions - a.total_positions)
-      .slice(0, 3);
+      .slice(0, 3); // Maximum 3 non-priority tokens
+
+    console.log('\nOther tokens to add:', otherTokens);
 
     // Return exactly 6 tokens max (3 priority + up to 3 others with >= 5 positions)
-    return [...result, ...otherTokens].slice(0, 6);
+    const finalResult = [...result, ...otherTokens].slice(0, 6);
+    console.log('\nFinal result:', finalResult);
+    return finalResult;
   } catch (error) {
     console.error('Error processing position data:', error);
     throw error;
@@ -879,33 +913,150 @@ function processPositionStatistics(positions: Position[]): {
   long_percentage: number;
   short_percentage: number;
 } {
+<<<<<<< Updated upstream
   const stats = {
     long_count: 0,
     short_count: 0,
     total_positions: positions.length,
     long_percentage: 0,
     short_percentage: 0
+=======
+  const long_count = positions.filter(p => {
+    // Check all possible ways a position could be marked as LONG
+    if (p.type === 'LONG' || p.side === 'LONG') return true;
+    if (p.isLong === true) return true;
+    if (p.type === 'SHORT' || p.side === 'SHORT') return false;
+    if (p.isLong === false) return false;
+    return false; // Default to SHORT if unclear
+  }).length;
+
+  const total_positions = positions.length;
+  const short_count = total_positions - long_count;
+  
+  // Calculate percentages
+  const long_percentage = Number(((long_count / total_positions) * 100).toFixed(2));
+  const short_percentage = Number(((short_count / total_positions) * 100).toFixed(2));
+
+  return {
+    long_count,
+    short_count,
+    long_percentage,
+    short_percentage,
+    total_positions,
+>>>>>>> Stashed changes
   };
 
+<<<<<<< Updated upstream
   // Count long and short positions
   for (const position of positions) {
     if (position.isLong || position.type === 'LONG' || position.side === 'LONG') {
       stats.long_count++;
     } else {
       stats.short_count++;
+=======
+/**
+ * Cloudflare Worker fetch handler
+ * Processes HTTP requests to the API endpoints
+ * 
+ * @param {Request} request - HTTP request
+ * @param {Env} env - Environment variables and bindings
+ * @param {ExecutionContext} ctx - Execution context
+ * @returns {Promise<Response>} HTTP response
+ */
+export default {
+  /**
+   * Fetch handler for HTTP requests
+   */
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    // Add CORS headers to all responses
+    const headers = {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, HEAD, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+      'Content-Type': 'application/json',
+    };
+
+    // Handle OPTIONS request for CORS
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { headers });
+    }
+
+    try {
+      // Try to get data from KV cache first
+      const cachedData = await env.SMART_MONEY_CACHE.get('token-stats');
+      if (cachedData) {
+        // Parse cached data and return only the token stats array
+        const parsed = JSON.parse(cachedData);
+        return new Response(JSON.stringify(parsed.data), { headers });
+      }
+
+      // If not in cache, get positions from R2
+      const positions = await getAllPositions(env);
+      
+      // Process position data
+      const tokenStats = await processPositionData(positions);
+      
+      // Store in KV cache with metadata (but don't return it)
+      const cacheData = {
+        data: tokenStats,
+        from_cache: false,
+        last_updated: new Date().toISOString()
+      };
+      await env.SMART_MONEY_CACHE.put('token-stats', JSON.stringify(cacheData), { expirationTtl: 3600 });
+      
+      // Return only the token stats array
+      return new Response(JSON.stringify(tokenStats), { headers });
+    } catch (error: any) {
+      console.error('Error processing request:', error);
+      return new Response(JSON.stringify({ 
+        error: 'Internal Server Error',
+        message: error?.message || 'Unknown error occurred'
+      }), { 
+        status: 500,
+        headers 
+      });
+    }
+  },
+
+  /**
+   * Scheduled task handler
+   */
+  async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+    try {
+      await updatePositions(env);
+    } catch (error) {
+      console.error('Error in scheduled task:', error);
+>>>>>>> Stashed changes
     }
   }
 
+<<<<<<< Updated upstream
   // Calculate percentages
   if (stats.total_positions > 0) {
     stats.long_percentage = (stats.long_count / stats.total_positions) * 100;
     stats.short_percentage = (stats.short_count / stats.total_positions) * 100;
+=======
+/**
+ * Update positions
+ * @param env Environment variables and bindings
+ */
+async function updatePositions(env: Env): Promise<void> {
+  try {
+    const copinService = new CopinService(COPIN_BASE_URL, COPIN_API_KEY);
+    const positions = await copinService.getPositions();
+    
+    // Store in R2
+    await env.SMART_MONEY_BUCKET.put(R2_KEY, JSON.stringify(positions));
+  } catch (error) {
+    console.error('Error updating positions:', error);
+>>>>>>> Stashed changes
   }
 
   return stats;
 }
 
 /**
+<<<<<<< Updated upstream
  * Record Metrics
  * Records metrics for monitoring API performance and usage
  * 
@@ -953,6 +1104,14 @@ async function recordMetrics(env: Env, metrics: Partial<MetricsData>, isDev: boo
  * Metrics Data Structure
  * Structure for tracking API performance and usage
  * @interface MetricsData
+=======
+ * Fetch position data for a specific trader and protocol.
+ * 
+ * @param {string} trader_id - Trader ID
+ * @param {string} protocol - Protocol name
+ * @param {Env} env - Environment variables and bindings
+ * @returns {Promise<Position[]>} Array of positions
+>>>>>>> Stashed changes
  */
 interface MetricsData {
   total_requests: number;  // Total number of API requests

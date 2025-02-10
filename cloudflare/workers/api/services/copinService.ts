@@ -18,7 +18,7 @@
  * @since 2025-02-10
  */
 
-import { Position } from '../types';
+import { Env, Position } from '../types';
 import { TRADER_WALLETS } from '../constants/wallets';
 import { SUPPORTED_PROTOCOLS } from '../constants/protocols';
 
@@ -118,22 +118,20 @@ export class CopinService {
    * @throws {Error} If batch fetching fails
    */
   async getPositions(): Promise<Position[]> {
-    const allPositions: Position[] = [];
-    
-    for (const traderId of TRADER_WALLETS) {
-      for (const protocol of SUPPORTED_PROTOCOLS) {
-        try {
-          const positions = await this.fetchPositionsForTrader(traderId, protocol);
-          allPositions.push(...positions);
-        } catch (error) {
-          console.error(`Error fetching positions for trader ${traderId} on ${protocol}:`, error);
-        }
-        // Add a small delay to avoid rate limiting
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
+    try {
+      console.log('Starting to fetch all positions...');
+      console.log('API Base:', this.apiBase);
+      console.log('API Key length:', this.apiKey.length);
+      console.log('Supported protocols:', SUPPORTED_PROTOCOLS);
+      console.log('Number of trader wallets:', TRADER_WALLETS.length);
+      
+      const positions = await this.fetchAllPositions();
+      console.log(`Successfully fetched ${positions.length} positions`);
+      return positions;
+    } catch (error) {
+      console.error('Error in getPositions:', error);
+      throw error;
     }
-    
-    return allPositions;
   }
 
   /**
@@ -148,13 +146,12 @@ export class CopinService {
    */
   async fetchPositionsForTrader(traderId: string, protocol: string): Promise<Position[]> {
     const positions: Position[] = [];
-    try {
-      let offset = 0;
-      let hasMore = true;
-      const limit = 100;
+    const limit = 100;
+    let offset = 0;
+    let hasMore = true;
 
+    try {
       while (hasMore) {
-        const url = `${this.apiBase}/${protocol}/position/filter`;
         const body = {
           pagination: {
             limit,
@@ -162,27 +159,43 @@ export class CopinService {
           },
           queries: [
             {
-              fieldName: "account",
-              value: traderId
-            },
-            {
               fieldName: "status",
               value: "OPEN"
+            },
+            {
+              fieldName: "account",
+              value: traderId
             }
           ],
           sortBy: "openBlockTime",
           sortType: "desc"
         };
 
+        const mappedProtocol = this.mapProtocolToEndpoint(protocol);
+        const url = `${this.apiBase}/api/${mappedProtocol}/position/filter`;
+        console.log(`[${protocol}] Fetching positions from ${url} for ${traderId}`);
+        console.log(`[${protocol}] Request body:`, JSON.stringify(body));
+        console.log(`[${protocol}] Headers:`, {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.apiKey.substring(0, 5)}...`,
+          'x-api-key': `${this.apiKey.substring(0, 5)}...`
+        });
+
         const response = await fetch(url, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+<<<<<<< Updated upstream
             'X-API-Key': this.apiKey
+=======
+            'Authorization': `Bearer ${this.apiKey}`,
+            'x-api-key': this.apiKey
+>>>>>>> Stashed changes
           },
           body: JSON.stringify(body)
         });
 
+<<<<<<< Updated upstream
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -196,13 +209,57 @@ export class CopinService {
         // Update pagination
         offset += limit;
         hasMore = offset < data.meta.total;
+=======
+        console.log(`[${protocol}] Response status:`, response.status);
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(`[${protocol}] API error for ${traderId}:`, errorText);
+          if (response.status === 404) {
+            console.log(`[${protocol}] Skipping 404 for ${traderId}`);
+            return [];
+          }
+          throw new Error(`API request failed: ${response.status} ${errorText}`);
+        }
+
+        const data = await response.json() as CopinApiResponse;
+        console.log(`[${protocol}] Got response data:`, {
+          meta: data.meta,
+          dataLength: data.data?.length || 0
+        });
+
+        if (!data.data) {
+          console.warn(`[${protocol}] No data returned for ${traderId}`);
+          return [];
+        }
+
+        const newPositions = this.processPositions(data.data, protocol);
+        console.log(`[${protocol}] Processed ${newPositions.length} positions for ${traderId}`);
+        positions.push(...newPositions);
+
+        // Check if there are more pages
+        offset += limit;
+        hasMore = data.meta && offset < data.meta.total;
+
+        // Add a small delay between requests
+        if (hasMore) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+>>>>>>> Stashed changes
       }
+
+      return positions;
     } catch (error) {
+<<<<<<< Updated upstream
       console.error(`Error fetching positions for ${traderId} on ${protocol}:`, error);
       throw error;
     }
 
     return positions;
+=======
+      console.error(`[${protocol}] Error fetching positions for ${traderId}:`, error);
+      return [];
+    }
+>>>>>>> Stashed changes
   }
 
   /**
@@ -282,5 +339,81 @@ export class CopinService {
     }
 
     return allPositions;
+  }
+
+  private mapProtocolToEndpoint(protocol: string): string {
+    const protocolMap: { [key: string]: string } = {
+      'GMX': 'gmx-arbitrum',
+      'GMX_V2': 'gmx-v2',
+      'KWENTA': 'kwenta',
+      'POLYNOMIAL': 'polynomial',
+      'GNS': 'gains',
+      'SYNTHETIX': 'snx',
+      'AEVO': 'aevo',
+      'HYPERLIQUID': 'hyperliquid',
+      'VERTEX': 'vertex',
+      'PERP': 'perpetual',
+      'LYRA': 'lyra'
+    };
+    const mapped = protocolMap[protocol] || protocol.toLowerCase();
+    console.log(`Mapped protocol ${protocol} to ${mapped}`);
+    return mapped;
+  }
+
+  private processPositions(positions: CopinPositionResponse[], protocol: string): Position[] {
+    return positions.map(pos => {
+      // Determine if the position is long
+      let isLong: boolean;
+      if (pos.type === 'LONG' || pos.side === 'LONG') {
+        isLong = true;
+      } else if (pos.type === 'SHORT' || pos.side === 'SHORT') {
+        isLong = false;
+      } else {
+        isLong = pos.isLong ?? false; // Default to short if unclear
+      }
+
+      // Determine position type
+      const type = isLong ? 'LONG' : 'SHORT';
+
+      // Convert string values to numbers
+      const size = pos.size ? parseFloat(pos.size) : 0;
+      const leverage = pos.leverage ? parseFloat(pos.leverage) : 0;
+      const pnl = pos.pnl ? parseFloat(pos.pnl) : 0;
+
+      return {
+        protocol,
+        account: pos.account || '',
+        indexToken: pos.indexToken || '',
+        size,
+        leverage,
+        pnl,
+        openBlockTime: pos.openBlockTime || '',
+        type,
+        side: type,
+        isLong
+      };
+    });
+  }
+}
+
+/**
+ * Get all positions from R2 storage
+ * @param env Environment variables and bindings
+ * @returns Array of positions
+ */
+export async function getAllPositions(env: Env): Promise<Position[]> {
+  try {
+    // Get positions data from R2
+    const object = await env.SMART_MONEY_BUCKET.get('positions.json');
+    if (!object) {
+      throw new Error('No positions data found in R2');
+    }
+
+    // Parse and return positions
+    const positions = await object.json<Position[]>();
+    return positions;
+  } catch (error) {
+    console.error('Error getting positions from R2:', error);
+    throw error;
   }
 }

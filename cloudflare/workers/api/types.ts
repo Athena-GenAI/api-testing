@@ -12,26 +12,18 @@
 /// <reference types="@cloudflare/workers-types" />
 
 /**
- * Environment Variables Interface
- * Defines the structure of environment variables and bindings available to the Worker
- * 
- * @interface Env
+ * Environment interface for the Smart Money API
  */
 export interface Env {
-  /** KV namespace for caching position data */
+  /**
+   * KV namespace for caching position data
+   */
   SMART_MONEY_CACHE: KVNamespace;
-  
-  /** R2 bucket for persistent storage */
+
+  /**
+   * R2 bucket for storing position data
+   */
   SMART_MONEY_BUCKET: R2Bucket;
-  
-  /** Base URL for Copin API */
-  COPIN_API_BASE: string;
-  
-  /** D1 database instance */
-  DB: D1Database;
-  
-  /** Workers AI binding */
-  AI: any;
 }
 
 /**
@@ -52,73 +44,39 @@ export interface KVNamespace {
 }
 
 /**
+ * Position data structure from Copin API
+ */
+export interface Position {
+  token: string;
+  isLong: boolean;
+  size: number;
+  leverage: number;
+  entryPrice: number;
+  markPrice: number;
+  unrealizedPnl: number;
+  realizedPnl: number;
+  createdAt: string;
+  closedAt: string | null;
+  trader: string;
+}
+
+/**
+ * Token statistics structure
+ */
+export interface TokenStats {
+  token: string;
+  total_positions: number;
+  percentage: string;
+  position: 'LONG' | 'SHORT' | 'NEUTRAL';
+}
+
+/**
  * Protocol Type
  * Represents supported DeFi protocols
  * 
  * @typedef {string} Protocol
  */
 export type Protocol = string;
-
-/**
- * Position Interface
- * Represents a single trading position
- * 
- * @interface Position
- */
-export interface Position {
-  /** Trader's account address */
-  account: string;
-  
-  /** Protocol where position was opened */
-  protocol: Protocol;
-  
-  /** Token being traded */
-  indexToken: string;
-  
-  /** Position size in USD */
-  size: number;
-  
-  /** Position leverage */
-  leverage: number;
-  
-  /** Current PnL */
-  pnl: number;
-  
-  /** Position open time */
-  openBlockTime: string;
-  
-  /** Position type */
-  type: 'LONG' | 'SHORT';
-  
-  /** Alternative position side indicator */
-  side?: 'LONG' | 'SHORT';
-  
-  /** Boolean flag for long positions */
-  isLong?: boolean;
-}
-
-/**
- * Token Statistics Interface
- * Aggregated statistics for a specific token
- * 
- * @interface TokenStats
- */
-export interface TokenStats {
-  /** Token symbol */
-  token: string;
-  
-  /** Number of long positions */
-  long: number;
-  
-  /** Number of short positions */
-  short: number;
-  
-  /** Total number of positions */
-  total: number;
-  
-  /** Timestamp of statistics calculation */
-  timestamp: number;
-}
 
 /**
  * Formatted Position Interface
