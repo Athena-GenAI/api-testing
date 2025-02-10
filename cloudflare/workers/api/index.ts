@@ -571,93 +571,110 @@ export default {
       // Record request
       await recordMetrics(env, { total_requests: 1 }, isDev);
 
-      // Handle metrics endpoint
-      if (path === 'metrics') {
-        const today = new Date().toISOString().split('T')[0];
-        const env_prefix = isDev ? 'dev' : 'prod';
-        const metrics = await env.SMART_MONEY_CACHE.get(`${env_prefix}:metrics:${today}`);
-        
-        return new Response(JSON.stringify({
-          data: metrics ? JSON.parse(metrics) : null,
-          date: today
-        }), {
-          status: 200,
-          headers: {
-            'Content-Type': 'application/json',
-            ...CORS_HEADERS,
-          },
-        });
-      }
-      
-      let cachedData = null;
-      
-      if (!isDev) {
-        const today = new Date().toISOString().split('T')[0];
-        console.log('Checking cache for date:', today);
-        cachedData = await env.SMART_MONEY_CACHE.get(`positions:${today}`);
-        if (cachedData) {
-          try {
-            cachedData = JSON.parse(cachedData);
-            // Record cache hit
-            await recordMetrics(env, { cache_hits: 1 }, isDev);
-          } catch (e) {
-            console.error('Error parsing cached data:', e);
-            cachedData = null;
-          }
+      // Handle different endpoints
+      switch (path) {
+        case 'metrics': {
+          const today = new Date().toISOString().split('T')[0];
+          const env_prefix = isDev ? 'dev' : 'prod';
+          const metrics = await env.SMART_MONEY_CACHE.get(`${env_prefix}:metrics:${today}`);
+          
+          return new Response(JSON.stringify({
+            data: metrics ? JSON.parse(metrics) : null,
+            date: today,
+            environment: isDev ? 'development' : 'production'
+          }), {
+            status: 200,
+            headers: {
+              'Content-Type': 'application/json',
+              ...CORS_HEADERS,
+            },
+          });
         }
-        console.log('Cache hit:', !!cachedData);
-      }
-
-      if (cachedData) {
-        console.log('Returning cached data');
-        const processingTime = Date.now() - startTime;
-        await recordMetrics(env, { processing_time: processingTime }, isDev);
         
-        return new Response(JSON.stringify({
-          data: cachedData,
-          from_cache: true,
-          last_updated: new Date().toISOString()
-        }), {
-          status: 200,
-          headers: {
-            'Content-Type': 'application/json',
-            ...CORS_HEADERS,
-          },
-        });
+        case 'token-stats': {
+          let cachedData = null;
+          
+          if (!isDev) {
+            const today = new Date().toISOString().split('T')[0];
+            console.log('Checking cache for date:', today);
+            cachedData = await env.SMART_MONEY_CACHE.get(`positions:${today}`);
+            if (cachedData) {
+              try {
+                cachedData = JSON.parse(cachedData);
+                // Record cache hit
+                await recordMetrics(env, { cache_hits: 1 }, isDev);
+              } catch (e) {
+                console.error('Error parsing cached data:', e);
+                cachedData = null;
+              }
+            }
+            console.log('Cache hit:', !!cachedData);
+          }
+
+          if (cachedData) {
+            console.log('Returning cached data');
+            const processingTime = Date.now() - startTime;
+            await recordMetrics(env, { processing_time: processingTime }, isDev);
+            
+            return new Response(JSON.stringify({
+              data: cachedData,
+              from_cache: true,
+              last_updated: new Date().toISOString()
+            }), {
+              status: 200,
+              headers: {
+                'Content-Type': 'application/json',
+                ...CORS_HEADERS,
+              },
+            });
+          }
+
+          console.log('Fetching fresh data from Copin API');
+          const copinService = new CopinService(COPIN_BASE_URL, COPIN_API_KEY);
+          const positions = await copinService.getPositions();
+          console.log(`Fetched ${positions.length} positions`);
+          
+          const processedData = await processPositionData(positions);
+          console.log(`Processed ${processedData.length} tokens`);
+
+          // Only cache in production environment
+          if (!isDev) {
+            console.log('Updating cache with fresh data');
+            const today = new Date().toISOString().split('T')[0];
+            await env.SMART_MONEY_CACHE.put(
+              `positions:${today}`,
+              JSON.stringify(processedData)
+            );
+          }
+
+          const processingTime = Date.now() - startTime;
+          await recordMetrics(env, { processing_time: processingTime }, isDev);
+
+          return new Response(JSON.stringify({
+            data: processedData,
+            from_cache: false,
+            last_updated: new Date().toISOString()
+          }), {
+            status: 200,
+            headers: {
+              'Content-Type': 'application/json',
+              ...CORS_HEADERS,
+            },
+          });
+        }
+        
+        default:
+          return new Response(JSON.stringify({
+            error: 'Not Found',
+            message: `Endpoint '${path}' does not exist`
+          }), {
+            status: 404,
+            headers: {
+              'Content-Type': 'application/json',
+              ...CORS_HEADERS,
+            },
+          });
       }
-
-      console.log('Fetching fresh data from Copin API');
-      const copinService = new CopinService(COPIN_BASE_URL, COPIN_API_KEY);
-      const positions = await copinService.getPositions();
-      console.log(`Fetched ${positions.length} positions`);
-      
-      const processedData = await processPositionData(positions);
-      console.log(`Processed ${processedData.length} tokens`);
-
-      // Only cache in production environment
-      if (!isDev) {
-        console.log('Updating cache with fresh data');
-        const today = new Date().toISOString().split('T')[0];
-        await env.SMART_MONEY_CACHE.put(
-          `positions:${today}`,
-          JSON.stringify(processedData)
-        );
-      }
-
-      const processingTime = Date.now() - startTime;
-      await recordMetrics(env, { processing_time: processingTime }, isDev);
-
-      return new Response(JSON.stringify({
-        data: processedData,
-        from_cache: false,
-        last_updated: new Date().toISOString()
-      }), {
-        status: 200,
-        headers: {
-          'Content-Type': 'application/json',
-          ...CORS_HEADERS,
-        },
-      });
     } catch (error) {
       console.error('Error processing request:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
