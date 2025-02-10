@@ -527,6 +527,29 @@ export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     const path = url.pathname.replace('/smart-money/', '');
+    
+    // Only check cache in production environment
+    const isDev = url.hostname.includes('dev-api') || url.hostname.includes('localhost');
+    let cachedData = null;
+    
+    if (!isDev) {
+      const today = new Date().toISOString().split('T')[0];
+      cachedData = await env.SMART_MONEY_CACHE.get(`positions:${today}`, 'json');
+    }
+
+    if (cachedData) {
+      return new Response(JSON.stringify({
+        data: cachedData,
+        from_cache: true,
+        last_updated: new Date().toISOString()
+      }), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          ...CORS_HEADERS,
+        },
+      });
+    }
 
     try {
       if (request.method === 'GET' && path === 'positions') {
@@ -595,12 +618,14 @@ export default {
       // Store in R2
       await env.SMART_MONEY_BUCKET.put(R2_KEY, JSON.stringify(positions));
       
-      // Process positions and store in KV for caching
-      const processedPositions = await processPositionData(positions);
-      await env.SMART_MONEY_CACHE.put(
-        `positions:${new Date().toISOString().split('T')[0]}`,
-        JSON.stringify(processedPositions)
-      );
+      // Only update cache in production environment
+      if (!event.cron.includes('dev')) {
+        const processedPositions = await processPositionData(positions);
+        await env.SMART_MONEY_CACHE.put(
+          `positions:${new Date().toISOString().split('T')[0]}`,
+          JSON.stringify(processedPositions)
+        );
+      }
       
       console.log('Successfully updated position data');
     } catch (error) {
@@ -621,12 +646,16 @@ async function updatePositions(env: Env): Promise<void> {
     // Store in R2
     await env.SMART_MONEY_BUCKET.put(R2_KEY, JSON.stringify(positions));
     
-    // Process positions and store in KV for caching
-    const processedPositions = await processPositionData(positions);
-    await env.SMART_MONEY_CACHE.put(
-      `positions:${new Date().toISOString().split('T')[0]}`,
-      JSON.stringify(processedPositions)
-    );
+    // Only update cache in production environment
+    const isDev = process.env.NODE_ENV === 'development';
+    
+    if (!isDev) {
+      const processedPositions = await processPositionData(positions);
+      await env.SMART_MONEY_CACHE.put(
+        `positions:${new Date().toISOString().split('T')[0]}`,
+        JSON.stringify(processedPositions)
+      );
+    }
     
     console.log('Successfully updated positions');
   } catch (error) {
