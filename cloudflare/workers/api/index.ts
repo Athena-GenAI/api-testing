@@ -548,11 +548,7 @@ export default {
             const processingTime = Date.now() - startTime;
             await recordMetrics(env, { processing_time: processingTime }, isDev);
             
-            return new Response(JSON.stringify({
-              data: cachedData,
-              from_cache: true,
-              last_updated: new Date().toISOString()
-            }), {
+            return new Response(JSON.stringify(cachedData), {
               status: 200,
               headers: {
                 'Content-Type': 'application/json',
@@ -582,11 +578,7 @@ export default {
           const processingTime = Date.now() - startTime;
           await recordMetrics(env, { processing_time: processingTime }, isDev);
 
-          return new Response(JSON.stringify({
-            data: processedData,
-            from_cache: false,
-            last_updated: new Date().toISOString()
-          }), {
+          return new Response(JSON.stringify(processedData), {
             status: 200,
             headers: {
               'Content-Type': 'application/json',
@@ -791,8 +783,6 @@ async function getAllPositions(env: Env): Promise<Position[]> {
  */
 async function processPositionData(positions: Position[]): Promise<TokenPosition[]> {
   try {
-    console.log('Processing positions:', positions.length);
-    
     // Group positions by token
     const positionsByToken: { [key: string]: Position[] } = {};
     for (const position of positions) {
@@ -802,9 +792,11 @@ async function processPositionData(positions: Position[]): Promise<TokenPosition
       if (token.includes('HYPERLIQUID-')) {
         token = token.split('-')[1];
       } else if (position.protocol === 'GMX_V2') {
-        // Use token symbol mapping for GMX_V2
         token = TOKEN_SYMBOLS[token.toLowerCase()] || token;
       }
+      
+      // Remove $ prefix and standardize format
+      token = token.replace('$', '').toUpperCase();
       
       if (!positionsByToken[token]) {
         positionsByToken[token] = [];
@@ -819,20 +811,17 @@ async function processPositionData(positions: Position[]): Promise<TokenPosition
       if (stats.total_positions >= 5) {
         // Determine position type based on long percentage
         let position: 'LONG' | 'SHORT' | 'NEUTRAL';
-        let percentage: number;
-
+        
         if (stats.long_percentage === 50) {
           position = 'NEUTRAL';
-          percentage = 50;
         } else {
           position = stats.long_percentage > 50 ? 'LONG' : 'SHORT';
-          percentage = position === 'LONG' ? stats.long_percentage : stats.short_percentage;
         }
 
         tokenStats.push({
           token,
           total_positions: stats.total_positions,
-          percentage: `${stats.long_percentage.toFixed(2)}%`,
+          percentage: `${Math.round(stats.long_percentage)}%`,
           position
         });
       }
@@ -878,20 +867,30 @@ function processPositionStatistics(positions: Position[]): {
   short_percentage: number;
   total_positions: number;
 } {
-  const long_count = positions.filter(p => p.isLong || p.type === 'LONG' || p.side === 'LONG').length;
-  const short_count = positions.filter(p => !p.isLong || p.type === 'SHORT' || p.side === 'SHORT').length;
-  const total_positions = positions.length;
-  
-  const long_percentage = Number(((long_count / total_positions) * 100).toFixed(2));
-  const short_percentage = Number(((short_count / total_positions) * 100).toFixed(2));
-
-  return {
-    long_count,
-    short_count,
-    long_percentage,
-    short_percentage,
-    total_positions,
+  const stats = {
+    long_count: 0,
+    short_count: 0,
+    total_positions: positions.length,
+    long_percentage: 0,
+    short_percentage: 0
   };
+
+  // Count long and short positions
+  for (const position of positions) {
+    if (position.isLong || position.type === 'LONG' || position.side === 'LONG') {
+      stats.long_count++;
+    } else {
+      stats.short_count++;
+    }
+  }
+
+  // Calculate percentages
+  if (stats.total_positions > 0) {
+    stats.long_percentage = (stats.long_count / stats.total_positions) * 100;
+    stats.short_percentage = (stats.short_count / stats.total_positions) * 100;
+  }
+
+  return stats;
 }
 
 /**
