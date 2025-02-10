@@ -12,18 +12,18 @@
 /// <reference types="@cloudflare/workers-types" />
 
 /**
- * Environment interface for the Smart Money API
+ * Environment interface for Cloudflare Worker
  */
 export interface Env {
-  /**
-   * KV namespace for caching position data
-   */
-  SMART_MONEY_CACHE: KVNamespace;
-
   /**
    * R2 bucket for storing position data
    */
   SMART_MONEY_BUCKET: R2Bucket;
+
+  /**
+   * KV namespace for caching position data
+   */
+  SMART_MONEY_CACHE: KVNamespace;
 }
 
 /**
@@ -44,24 +44,49 @@ export interface KVNamespace {
 }
 
 /**
- * Position data structure from Copin API
+ * Position type for token positions
  */
 export interface Position {
+  /** Token symbol */
   token: string;
-  isLong: boolean;
+  /** Account address */
+  account: string;
+  /** Protocol name */
+  protocol: string;
+  /** Index token symbol */
+  indexToken: string;
+  /** Position size */
   size: number;
+  /** Leverage used */
   leverage: number;
+  /** Profit/Loss */
+  pnl: number;
+  /** Block time when position was opened */
+  openBlockTime: string;
+  /** Position type (LONG/SHORT) */
+  type: 'LONG' | 'SHORT';
+  /** Position side (LONG/SHORT) */
+  side: 'LONG' | 'SHORT';
+  /** Whether position is long */
+  isLong: boolean;
+  /** Entry price */
   entryPrice: number;
+  /** Mark price */
   markPrice: number;
+  /** Unrealized PnL */
   unrealizedPnl: number;
+  /** Realized PnL */
   realizedPnl: number;
+  /** Creation timestamp */
   createdAt: string;
+  /** Closing timestamp */
   closedAt: string | null;
+  /** Trader address */
   trader: string;
 }
 
 /**
- * Token statistics structure
+ * Token statistics type for API response
  */
 export interface TokenStats {
   token: string;

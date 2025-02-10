@@ -246,18 +246,32 @@ export class CopinService {
   private processPositions(positions: CopinPositionResponse[], protocol: string): Position[] {
     return positions
       .filter(pos => pos.status === 'OPEN')
-      .map(pos => ({
-        account: pos.account || '',
-        protocol,
-        indexToken: pos.indexToken || '',
-        size: parseFloat(pos.size || '0'),
-        leverage: parseFloat(pos.leverage || '0'),
-        pnl: parseFloat(pos.pnl || '0'),
-        openBlockTime: pos.openBlockTime || '',
-        type: pos.type || (pos.isLong ? 'LONG' : 'SHORT'),
-        side: pos.side,
-        isLong: pos.isLong
-      }));
+      .map(pos => {
+        const isLong = pos.type === 'LONG' || pos.side === 'LONG' || !!pos.isLong;
+        const token = (pos.indexToken || '').toUpperCase();
+        const type = isLong ? ('LONG' as const) : ('SHORT' as const);
+        
+        return {
+          token,
+          account: pos.account || '',
+          protocol,
+          indexToken: token,
+          size: parseFloat(pos.size || '0'),
+          leverage: parseFloat(pos.leverage || '0'),
+          pnl: parseFloat(pos.pnl || '0'),
+          openBlockTime: pos.openBlockTime || '',
+          type,
+          side: type,
+          isLong,
+          entryPrice: 0, // Default values since they're not in CopinPositionResponse
+          markPrice: 0,
+          unrealizedPnl: parseFloat(pos.pnl || '0'),
+          realizedPnl: 0,
+          createdAt: pos.openBlockTime || '',
+          closedAt: null,
+          trader: pos.account || ''
+        } satisfies Position;
+      });
   }
 
   /**
@@ -331,41 +345,38 @@ export class CopinService {
     console.log(`Mapped protocol ${protocol} to ${mapped}`);
     return mapped;
   }
+}
 
-  private processPositions(positions: CopinPositionResponse[], protocol: string): Position[] {
-    return positions.map(pos => {
-      // Determine if the position is long
-      let isLong: boolean;
-      if (pos.type === 'LONG' || pos.side === 'LONG') {
-        isLong = true;
-      } else if (pos.type === 'SHORT' || pos.side === 'SHORT') {
-        isLong = false;
-      } else {
-        isLong = pos.isLong ?? false; // Default to short if unclear
-      }
-
-      // Determine position type
-      const type = isLong ? 'LONG' : 'SHORT';
-
-      // Convert string values to numbers
-      const size = pos.size ? parseFloat(pos.size) : 0;
-      const leverage = pos.leverage ? parseFloat(pos.leverage) : 0;
-      const pnl = pos.pnl ? parseFloat(pos.pnl) : 0;
-
-      return {
-        protocol,
-        account: pos.account || '',
-        indexToken: pos.indexToken || '',
-        size,
-        leverage,
-        pnl,
-        openBlockTime: pos.openBlockTime || '',
-        type,
-        side: type,
-        isLong
-      };
-    });
-  }
+/**
+ * Create a position object from raw data
+ * @param pos Raw position data
+ * @returns Position object
+ */
+function createPosition(pos: any): Position {
+  const isLong = pos.type === 'LONG' || pos.side === 'LONG' || !!pos.isLong;
+  const token = (pos.indexToken || '').toUpperCase();
+  const type = isLong ? ('LONG' as const) : ('SHORT' as const);
+  
+  return {
+    token,
+    account: pos.trader || '',
+    protocol: pos.protocol || 'unknown',
+    indexToken: token,
+    size: typeof pos.size === 'number' ? pos.size : 0,
+    leverage: typeof pos.leverage === 'number' ? pos.leverage : 0,
+    pnl: typeof pos.unrealizedPnl === 'number' ? pos.unrealizedPnl : 0,
+    openBlockTime: pos.createdAt || '',
+    type,
+    side: type,
+    isLong,
+    entryPrice: typeof pos.entryPrice === 'number' ? pos.entryPrice : 0,
+    markPrice: typeof pos.markPrice === 'number' ? pos.markPrice : 0,
+    unrealizedPnl: typeof pos.unrealizedPnl === 'number' ? pos.unrealizedPnl : 0,
+    realizedPnl: typeof pos.realizedPnl === 'number' ? pos.realizedPnl : 0,
+    createdAt: pos.createdAt || '',
+    closedAt: pos.closedAt || null,
+    trader: pos.trader || ''
+  } satisfies Position;
 }
 
 /**
@@ -381,44 +392,13 @@ export async function getAllPositions(env: Env): Promise<Position[]> {
       throw new Error('No positions data found in R2');
     }
 
-    // Parse and return positions
-    const positions = await object.json<Position[]>();
-    return positions;
+    // Parse positions
+    const rawPositions = await object.json<any[]>();
+    
+    // Transform positions to match required interface
+    return rawPositions.map(createPosition);
   } catch (error) {
     console.error('Error getting positions from R2:', error);
     throw error;
   }
-}
-
-/**
- * Process positions for a specific token
- * @param positions Array of positions for a token
- * @returns Processed token statistics
- */
-function processTokenPositions(positions: Position[]): {
-  long_count: number;
-  short_count: number;
-  total_positions: number;
-  long_percentage: number;
-} {
-  const stats = {
-    long_count: 0,
-    short_count: 0,
-    total_positions: positions.length,
-    long_percentage: 0
-  };
-
-  // Count long and short positions
-  for (const position of positions) {
-    if (position.isLong) {
-      stats.long_count++;
-    } else {
-      stats.short_count++;
-    }
-  }
-
-  // Calculate long percentage
-  stats.long_percentage = (stats.long_count / stats.total_positions) * 100;
-
-  return stats;
 }

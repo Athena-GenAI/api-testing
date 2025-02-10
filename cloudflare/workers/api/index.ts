@@ -389,9 +389,32 @@ const corsHeaders = {
 };
 
 /**
- * Worker Implementation
- * Main API functionality and request handling
+ * Update positions in storage
+ * @param env Environment variables and bindings
  */
+async function updatePositions(env: Env): Promise<void> {
+  try {
+    // Get positions from R2
+    const positions = await getAllPositions(env);
+    
+    // Process position data
+    const tokenStats = await processPositionData(positions);
+    
+    // Store in KV cache with metadata
+    const cacheData = {
+      data: tokenStats,
+      from_cache: false,
+      last_updated: new Date().toISOString()
+    };
+    await env.SMART_MONEY_CACHE.put('token-stats', JSON.stringify(cacheData), { expirationTtl: 3600 });
+    
+    console.log('Successfully updated positions');
+  } catch (error) {
+    console.error('Error updating positions:', error);
+    throw error;
+  }
+}
+
 export default {
   /**
    * Fetch Handler
@@ -642,95 +665,56 @@ export default {
 };
 
 /**
- * Helper Functions
- * Utility functions for data processing and API operations
+ * Process position data to generate token statistics
+ * @param positions Array of positions from Copin API
+ * @returns Array of token statistics
  */
-
-/**
- * Update Positions
- * Fetches fresh position data from Copin API
- * 
- * Process:
- * 1. Fetch data for each trader/protocol combination
- * 2. Process and aggregate positions
- * 3. Store in R2 and update cache
- * 
- * @param {Env} env - Environment bindings
- */
-async function updatePositions(env: Env): Promise<void> {
-  try {
-    const copinService = new CopinService(COPIN_BASE_URL, COPIN_API_KEY);
-    const positions = await copinService.getPositions();
-    
-    // Store in R2
-    await env.SMART_MONEY_BUCKET.put(R2_KEY, JSON.stringify(positions));
-    
-    // Only update cache in production environment
-    const isDev = process.env.NODE_ENV === 'development';
-    
-    if (!isDev) {
-      console.log('Updating cache with fresh data');
-      const processedPositions = await processPositionData(positions);
-      await env.SMART_MONEY_CACHE.put(
-        `positions:${new Date().toISOString().split('T')[0]}`,
-        JSON.stringify({
-          data: processedPositions,
-          from_cache: false,
-          last_updated: new Date().toISOString()
-        })
-      );
+async function processPositionData(positions: Position[]): Promise<TokenPosition[]> {
+  // Group positions by token
+  const tokenGroups = positions.reduce((acc, pos) => {
+    const token = pos.indexToken.toUpperCase();
+    if (!acc[token]) {
+      acc[token] = {
+        long: 0,
+        short: 0,
+        total: 0
+      };
     }
-    
-    console.log('Successfully updated positions');
-  } catch (error) {
-    console.error('Error updating positions:', error);
-  }
-}
+    if (pos.isLong) {
+      acc[token].long++;
+    } else {
+      acc[token].short++;
+    }
+    acc[token].total++;
+    return acc;
+  }, {} as Record<string, { long: number; short: number; total: number }>);
 
-/**
- * Fetch Position Data
- * Retrieves positions for a specific trader and protocol
- * 
- * Includes retry logic and rate limiting
- * 
- * @param {string} trader_id - Trader wallet address
- * @param {string} protocol - Protocol name
- * @param {Env} env - Environment bindings
- * @returns {Promise<Position[]>} Array of positions
- */
-async function fetchPositionData(trader_id: string, protocol: string, env: Env): Promise<Position[]> {
-  try {
-    const copinService = new CopinService(COPIN_BASE_URL, COPIN_API_KEY);
-    const positions = await copinService.fetchAllPositions();
-    return positions.filter(pos => pos.account === trader_id && pos.protocol === protocol);
-  } catch (error) {
-    console.error(`Error fetching position data for ${protocol} trader ${trader_id}:`, error);
-    return [];
-  }
-}
+  // Convert to TokenStats array
+  const stats = Object.entries(tokenGroups)
+    .filter(([_, stats]) => stats.total >= 5) // Only include tokens with 5 or more positions
+    .map(([token, stats]): TokenPosition => {
+      const longPercentage = Math.round((stats.long / stats.total) * 100);
+      return {
+        token,
+        total_positions: stats.total,
+        percentage: `${longPercentage}%`,
+        position: longPercentage === 50 ? 'NEUTRAL' : longPercentage > 50 ? 'LONG' : 'SHORT'
+      };
+    });
 
-/**
- * Sleep Function
- * Utility for implementing delays
- * Used for rate limiting and retries
- * 
- * @param {number} ms - Milliseconds to sleep
- * @returns {Promise<void>}
- */
-function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
+  // Sort tokens: BTC, ETH, SOL first, then by total positions
+  const priorityTokens = ['BTC', 'ETH', 'SOL'];
+  const sortedStats = stats.sort((a, b) => {
+    const aIndex = priorityTokens.indexOf(a.token);
+    const bIndex = priorityTokens.indexOf(b.token);
+    if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
+    if (aIndex !== -1) return -1;
+    if (bIndex !== -1) return 1;
+    return b.total_positions - a.total_positions;
+  });
 
-/**
- * dYdX Address Check
- * Validates if an address is a dYdX address
- * Used for protocol-specific handling
- * 
- * @param {string} address - Address to check
- * @returns {boolean} True if valid dYdX address
- */
-function isDydxAddress(address: string): boolean {
-  return address.startsWith('dydx1');
+  // Return maximum 6 tokens
+  return sortedStats.slice(0, 6);
 }
 
 /**
@@ -756,256 +740,6 @@ async function getAllPositions(env: Env): Promise<Position[]> {
     throw error;
   }
 }
-
-/**
- * Process Position Data
- * Processes position data to calculate statistics for each token
- * 
- * @param {Position[]} positions - Array of positions to process
- * @returns {Promise<TokenPosition[]>} Array of token positions with statistics
- */
-async function processPositionData(positions: Position[]): Promise<TokenPosition[]> {
-  try {
-    console.log('Starting to process positions:', positions.length);
-    
-    // Group positions by token
-    const positionsByToken: { [key: string]: Position[] } = {};
-    for (const position of positions) {
-      let token = position.indexToken.toUpperCase(); // Ensure uppercase
-      
-      // Handle special token formats
-      if (token.includes('HYPERLIQUID-')) {
-        token = token.split('-')[1];
-      } else if (position.protocol === 'GMX_V2') {
-        token = TOKEN_SYMBOLS[token.toLowerCase()] || token;
-      }
-      
-      // Clean up token names
-      token = token.replace(/^WBTC$/, 'BTC')
-                  .replace(/^WETH$/, 'ETH')
-                  .replace(/^WSOL$/, 'SOL');
-      
-      console.log(`Processing position for token ${token} from ${position.protocol}`);
-      
-      if (!positionsByToken[token]) {
-        positionsByToken[token] = [];
-      }
-      positionsByToken[token].push(position);
-    }
-
-    console.log('Grouped positions by token:', Object.keys(positionsByToken));
-
-    // Calculate statistics for each token
-    const tokenStats: TokenPosition[] = [];
-    for (const [token, tokenPositions] of Object.entries(positionsByToken)) {
-      console.log(`\nProcessing stats for ${token}:`);
-      console.log(`Total positions: ${tokenPositions.length}`);
-      
-      const stats = processPositionStatistics(tokenPositions);
-      console.log('Position stats:', stats);
-      
-      // Only include tokens with at least 5 positions
-      if (stats.total_positions >= 5) {
-        // Determine position type based on long percentage
-        let position: 'LONG' | 'SHORT' | 'NEUTRAL';
-        let percentage = stats.long_percentage;
-
-        if (percentage === 50) {
-          position = 'NEUTRAL';
-        } else if (percentage > 50) {
-          position = 'LONG';
-        } else {
-          position = 'SHORT';
-          percentage = 100 - percentage; // For SHORT positions, use the short percentage
-        }
-
-        const tokenStat = {
-          token: token.toUpperCase(), // Ensure uppercase
-          total_positions: stats.total_positions,
-          percentage: `${Math.round(percentage)}%`, // Round to whole number
-          position
-        };
-        console.log('Adding token stat:', tokenStat);
-        tokenStats.push(tokenStat);
-      } else {
-        console.log(`Skipping ${token} - insufficient positions (${stats.total_positions} < 5)`);
-      }
-    }
-
-    console.log('\nAll token stats before filtering:', tokenStats);
-
-    // Priority tokens in specific order (BTC, ETH, SOL)
-    const priorityTokens = ['BTC', 'ETH', 'SOL'];
-    const result: TokenPosition[] = [];
-
-    // First add priority tokens in order if they exist
-    for (const token of priorityTokens) {
-      const stat = tokenStats.find(s => s.token === token);
-      if (stat) {
-        console.log(`Adding priority token ${token}:`, stat);
-        result.push(stat);
-      } else {
-        console.log(`Priority token ${token} not found in stats`);
-      }
-    }
-
-    // Then add other tokens with at least 5 positions, sorted by total positions
-    const otherTokens = tokenStats
-      .filter(stat => !priorityTokens.includes(stat.token))
-      .sort((a, b) => b.total_positions - a.total_positions)
-      .slice(0, 3); // Maximum 3 non-priority tokens
-
-    console.log('\nOther tokens to add:', otherTokens);
-
-    // Return exactly 6 tokens max (3 priority + up to 3 others with >= 5 positions)
-    const finalResult = [...result, ...otherTokens].slice(0, 6);
-    console.log('\nFinal result:', finalResult);
-    return finalResult;
-  } catch (error) {
-    console.error('Error processing position data:', error);
-    throw error;
-  }
-}
-
-/**
- * Process Position Statistics
- * Calculates statistics for a given array of positions
- * 
- * @param {Position[]} positions - Array of positions to process
- * @returns {{ long_count: number, short_count: number, total_positions: number, long_percentage: number, short_percentage: number }} Position statistics
- */
-function processPositionStatistics(positions: Position[]): {
-  long_count: number;
-  short_count: number;
-  total_positions: number;
-  long_percentage: number;
-  short_percentage: number;
-} {
-  const long_count = positions.filter(p => {
-    // Check all possible ways a position could be marked as LONG
-    if (p.type === 'LONG' || p.side === 'LONG') return true;
-    if (p.isLong === true) return true;
-    if (p.type === 'SHORT' || p.side === 'SHORT') return false;
-    if (p.isLong === false) return false;
-    return false; // Default to SHORT if unclear
-  }).length;
-
-  const total_positions = positions.length;
-  const short_count = total_positions - long_count;
-  
-  // Calculate percentages
-  const long_percentage = Number(((long_count / total_positions) * 100).toFixed(2));
-  const short_percentage = Number(((short_count / total_positions) * 100).toFixed(2));
-
-  return {
-    long_count,
-    short_count,
-    long_percentage,
-    short_percentage,
-    total_positions,
-  };
-}
-
-/**
- * Cloudflare Worker fetch handler
- * Processes HTTP requests to the API endpoints
- * 
- * @param {Request} request - HTTP request
- * @param {Env} env - Environment variables and bindings
- * @param {ExecutionContext} ctx - Execution context
- * @returns {Promise<Response>} HTTP response
- */
-export default {
-  /**
-   * Fetch handler for HTTP requests
-   */
-  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-    // Add CORS headers to all responses
-    const headers = {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, HEAD, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
-      'Content-Type': 'application/json',
-    };
-
-    // Handle OPTIONS request for CORS
-    if (request.method === 'OPTIONS') {
-      return new Response(null, { headers });
-    }
-
-    try {
-      // Try to get data from KV cache first
-      const cachedData = await env.SMART_MONEY_CACHE.get('token-stats');
-      if (cachedData) {
-        // Parse cached data and return only the token stats array
-        const parsed = JSON.parse(cachedData);
-        return new Response(JSON.stringify(parsed.data), { headers });
-      }
-
-      // If not in cache, get positions from R2
-      const positions = await getAllPositions(env);
-      
-      // Process position data
-      const tokenStats = await processPositionData(positions);
-      
-      // Store in KV cache with metadata (but don't return it)
-      const cacheData = {
-        data: tokenStats,
-        from_cache: false,
-        last_updated: new Date().toISOString()
-      };
-      await env.SMART_MONEY_CACHE.put('token-stats', JSON.stringify(cacheData), { expirationTtl: 3600 });
-      
-      // Return only the token stats array
-      return new Response(JSON.stringify(tokenStats), { headers });
-    } catch (error: any) {
-      console.error('Error processing request:', error);
-      return new Response(JSON.stringify({ 
-        error: 'Internal Server Error',
-        message: error?.message || 'Unknown error occurred'
-      }), { 
-        status: 500,
-        headers 
-      });
-    }
-  },
-
-  /**
-   * Scheduled task handler
-   */
-  async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
-    try {
-      await updatePositions(env);
-    } catch (error) {
-      console.error('Error in scheduled task:', error);
-    }
-  }
-};
-
-/**
- * Update positions
- * @param env Environment variables and bindings
- */
-async function updatePositions(env: Env): Promise<void> {
-  try {
-    const copinService = new CopinService(COPIN_BASE_URL, COPIN_API_KEY);
-    const positions = await copinService.getPositions();
-    
-    // Store in R2
-    await env.SMART_MONEY_BUCKET.put(R2_KEY, JSON.stringify(positions));
-  } catch (error) {
-    console.error('Error updating positions:', error);
-  }
-}
-
-/**
- * Fetch position data for a specific trader and protocol.
- * 
- * @param {string} trader_id - Trader ID
- * @param {string} protocol - Protocol name
- * @param {Env} env - Environment variables and bindings
- * @returns {Promise<Position[]>} Array of positions
- */
 
 /**
  * Record Metrics
