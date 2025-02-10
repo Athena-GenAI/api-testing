@@ -16,7 +16,6 @@
 
 import { Env } from './types';
 import { CopinService } from './services/copinService';
-import { DatabaseService } from './services/databaseService';
 
 // Constants
 /**
@@ -596,9 +595,14 @@ export default {
       // Store in R2
       await env.SMART_MONEY_BUCKET.put(R2_KEY, JSON.stringify(positions));
       
-      // Store in database
-      const dbService = new DatabaseService(env.DB);
-      await dbService.storePositions(positions);
+      // Process positions and store in KV for caching
+      const processedPositions = await processPositionData(positions);
+      await env.SMART_MONEY_CACHE.put(
+        `positions:${new Date().toISOString().split('T')[0]}`,
+        JSON.stringify(processedPositions)
+      );
+      
+      console.log('Successfully updated position data');
     } catch (error) {
       console.error('Error in scheduled task:', error);
     }
@@ -617,36 +621,16 @@ async function updatePositions(env: Env): Promise<void> {
     // Store in R2
     await env.SMART_MONEY_BUCKET.put(R2_KEY, JSON.stringify(positions));
     
-    // Store in database
-    const dbService = new DatabaseService(env.DB);
-    await dbService.storePositions(positions);
+    // Process positions and store in KV for caching
+    const processedPositions = await processPositionData(positions);
+    await env.SMART_MONEY_CACHE.put(
+      `positions:${new Date().toISOString().split('T')[0]}`,
+      JSON.stringify(processedPositions)
+    );
+    
+    console.log('Successfully updated positions');
   } catch (error) {
     console.error('Error updating positions:', error);
-  }
-}
-
-/**
- * Scheduled task handler
- * Updates position data cache periodically
- * 
- * @param {ScheduledEvent} event - Scheduled event details
- * @param {Env} env - Environment variables and bindings
- * @param {ExecutionContext} ctx - Execution context
- */
-async function scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
-  console.log('Starting scheduled task to update position data');
-  try {
-    const copinService = new CopinService(COPIN_BASE_URL, COPIN_API_KEY);
-    const positions = await copinService.getPositions();
-    
-    // Store in R2
-    await env.SMART_MONEY_BUCKET.put(R2_KEY, JSON.stringify(positions));
-    
-    // Store in database
-    const dbService = new DatabaseService(env.DB);
-    await dbService.storePositions(positions);
-  } catch (error) {
-    console.error('Error in scheduled task:', error);
   }
 }
 
