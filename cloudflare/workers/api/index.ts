@@ -586,7 +586,8 @@ export default {
     
     try {
       const url = new URL(request.url);
-      const path = url.pathname.replace('/smart-money/', '');
+      const path = url.pathname.replace(/^\/smart-money\//, '');
+      console.log('Processing request for path:', path);
       
       // Record request
       await recordMetrics(env, { total_requests: 1 }, isDev);
