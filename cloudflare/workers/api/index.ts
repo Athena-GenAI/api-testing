@@ -514,6 +514,39 @@ function processPositionStatistics(positions: Position[]): {
   };
 }
 
+interface MetricsData {
+  total_requests: number;
+  cache_hits: number;
+  api_errors: number;
+  processing_time: number;
+}
+
+async function recordMetrics(env: Env, metrics: Partial<MetricsData>, isDev: boolean) {
+  const today = new Date().toISOString().split('T')[0];
+  const env_prefix = isDev ? 'dev' : 'prod';
+  
+  // Get existing metrics
+  const existing = await env.SMART_MONEY_CACHE.get(`${env_prefix}:metrics:${today}`);
+  const currentMetrics: MetricsData = existing ? JSON.parse(existing) : {
+    total_requests: 0,
+    cache_hits: 0,
+    api_errors: 0,
+    processing_time: 0
+  };
+
+  // Update metrics
+  Object.assign(currentMetrics, {
+    ...currentMetrics,
+    ...metrics
+  });
+
+  // Store updated metrics
+  await env.SMART_MONEY_CACHE.put(
+    `${env_prefix}:metrics:${today}`,
+    JSON.stringify(currentMetrics)
+  );
+}
+
 /**
  * Cloudflare Worker fetch handler
  * Processes HTTP requests to the API endpoints
@@ -525,6 +558,7 @@ function processPositionStatistics(positions: Position[]): {
  */
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    const startTime = Date.now();
     // Only check cache in production environment
     const isDev = request.url.includes('workers.dev') || 
                  new URL(request.url).hostname.includes('localhost');
@@ -533,6 +567,27 @@ export default {
     try {
       const url = new URL(request.url);
       const path = url.pathname.replace('/smart-money/', '');
+      
+      // Record request
+      await recordMetrics(env, { total_requests: 1 }, isDev);
+
+      // Handle metrics endpoint
+      if (path === 'metrics') {
+        const today = new Date().toISOString().split('T')[0];
+        const env_prefix = isDev ? 'dev' : 'prod';
+        const metrics = await env.SMART_MONEY_CACHE.get(`${env_prefix}:metrics:${today}`);
+        
+        return new Response(JSON.stringify({
+          data: metrics ? JSON.parse(metrics) : null,
+          date: today
+        }), {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+            ...CORS_HEADERS,
+          },
+        });
+      }
       
       let cachedData = null;
       
@@ -543,6 +598,8 @@ export default {
         if (cachedData) {
           try {
             cachedData = JSON.parse(cachedData);
+            // Record cache hit
+            await recordMetrics(env, { cache_hits: 1 }, isDev);
           } catch (e) {
             console.error('Error parsing cached data:', e);
             cachedData = null;
@@ -553,6 +610,9 @@ export default {
 
       if (cachedData) {
         console.log('Returning cached data');
+        const processingTime = Date.now() - startTime;
+        await recordMetrics(env, { processing_time: processingTime }, isDev);
+        
         return new Response(JSON.stringify({
           data: cachedData,
           from_cache: true,
@@ -584,6 +644,9 @@ export default {
         );
       }
 
+      const processingTime = Date.now() - startTime;
+      await recordMetrics(env, { processing_time: processingTime }, isDev);
+
       return new Response(JSON.stringify({
         data: processedData,
         from_cache: false,
@@ -599,6 +662,13 @@ export default {
       console.error('Error processing request:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       const errorStack = error instanceof Error ? error.stack : undefined;
+      
+      // Record error
+      await recordMetrics(env, { api_errors: 1 }, isDev);
+      
+      const processingTime = Date.now() - startTime;
+      await recordMetrics(env, { processing_time: processingTime }, isDev);
+
       return new Response(JSON.stringify({
         error: 'Internal server error',
         message: errorMessage,
