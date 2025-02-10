@@ -16,11 +16,25 @@ jobs:
     name: Deploy
     steps:
       - uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          
+      - name: Install Dependencies
+        run: npm ci
+        working-directory: cloudflare
+        
+      - name: Run Tests
+        run: npm test
+        working-directory: cloudflare
+
       - name: Deploy Development
         if: github.ref == 'refs/heads/develop'
         uses: cloudflare/wrangler-action@v3
         with:
-          apiToken: ${{ secrets.CF_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           environment: development
           workingDirectory: 'cloudflare'
           
@@ -28,7 +42,7 @@ jobs:
         if: github.ref == 'refs/heads/main'
         uses: cloudflare/wrangler-action@v3
         with:
-          apiToken: ${{ secrets.CF_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           environment: production
           workingDirectory: 'cloudflare'
           preCommands: |
@@ -36,4 +50,4 @@ jobs:
             npm test
           postCommands: |
             echo "Running post-deployment verification..."
-            curl -s https://api.0xathena.ai/smart-money/token-stats | jq '.[] | select(.token=="BTC")'
+            curl -s https://api.0xathena.ai/smart-money/token-stats
