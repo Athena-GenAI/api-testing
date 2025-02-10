@@ -28,7 +28,13 @@ export class PositionAnalyzer {
       const token = this.normalizeToken(position.indexToken);
       
       if (!tokenStats[token]) {
-        tokenStats[token] = { long: 0, short: 0 };
+        tokenStats[token] = {
+          token,
+          long: 0,
+          short: 0,
+          total: 0,
+          timestamp: Date.now()
+        };
       }
 
       if (position.isLong) {
@@ -47,27 +53,22 @@ export class PositionAnalyzer {
    * @returns Formatted results
    */
   private formatResults(tokenStats: TokenStatistics): FormattedResult {
-    const formattedResult: FormattedResult = {};
-    const orderedTokens = this.orderTokensByPriority(Object.keys(tokenStats));
-
-    for (const token of orderedTokens) {
-      const stats = tokenStats[token];
-      const totalPositions = stats.long + stats.short;
-
-      if (totalPositions > 0) {
-        const longPercentage = (stats.long / totalPositions) * 100;
-        const shortPercentage = (stats.short / totalPositions) * 100;
-        
-        const { position, percentage } = this.determinePosition(longPercentage, shortPercentage);
-
-        formattedResult[token] = {
-          total_positions: totalPositions,
-          percentage: `${percentage.toFixed(1)}%`,
-          position: `${position} ${percentage.toFixed(1)}%`
-        };
-      }
+    const formattedResult: FormattedResult = [];
+    
+    for (const [token, stats] of Object.entries(tokenStats)) {
+      const position = stats.long >= stats.short ? 'LONG' : 'SHORT';
+      const longPercentage = (stats.long / (stats.long + stats.short)) * 100;
+      const shortPercentage = (stats.short / (stats.long + stats.short)) * 100;
+      const percentage = position === 'LONG' ? longPercentage : shortPercentage;
+      
+      formattedResult.push({
+        token,
+        total_positions: stats.long + stats.short,
+        percentage: `${percentage.toFixed(2)}% ${position === 'LONG' ? 'Long' : 'Short'}`,
+        position
+      });
     }
-
+    
     return formattedResult;
   }
 
@@ -91,12 +92,11 @@ export class PositionAnalyzer {
    * @returns Position type and percentage
    */
   private determinePosition(longPercentage: number, shortPercentage: number): { position: string; percentage: number } {
-    if (longPercentage > shortPercentage) {
+    if (longPercentage >= shortPercentage) {
       return { position: 'LONG', percentage: longPercentage };
-    } else if (shortPercentage > longPercentage) {
+    } else {
       return { position: 'SHORT', percentage: shortPercentage };
     }
-    return { position: 'NEUTRAL', percentage: 50.0 };
   }
 
   /**

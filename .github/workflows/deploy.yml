@@ -1,0 +1,39 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main  # production
+      - develop  # development
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    name: Deploy
+    steps:
+      - uses: actions/checkout@v3
+      - name: Deploy Development
+        if: github.ref == 'refs/heads/develop'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CF_API_TOKEN }}
+          environment: development
+          workingDirectory: 'cloudflare'
+          
+      - name: Deploy Production
+        if: github.ref == 'refs/heads/main'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CF_API_TOKEN }}
+          environment: production
+          workingDirectory: 'cloudflare'
+          preCommands: |
+            echo "Running pre-deployment checks..."
+            npm test
+          postCommands: |
+            echo "Running post-deployment verification..."
+            curl -s https://api.0xathena.ai/smart-money/token-stats | jq '.[] | select(.token=="BTC")'

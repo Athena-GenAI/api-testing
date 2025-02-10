@@ -8,6 +8,8 @@ export interface Env {
   SMART_MONEY_CACHE: KVNamespace;
   SMART_MONEY_BUCKET: R2Bucket;
   COPIN_API_BASE: string;
+  DB: D1Database;
+  AI: any;
 }
 
 export interface KVNamespace {
@@ -28,15 +30,19 @@ export interface Position {
   openBlockTime: string;
   type: 'LONG' | 'SHORT';
   side?: 'LONG' | 'SHORT';
-  isLong: boolean;
+  isLong?: boolean;
 }
 
 export interface TokenStats {
+  token: string;
   long: number;
   short: number;
+  total: number;
+  timestamp: number;
 }
 
 export interface FormattedPosition {
+  token: string;
   total_positions: number;
   percentage: string;
   position: string;
@@ -46,9 +52,7 @@ export interface TokenStatistics {
   [token: string]: TokenStats;
 }
 
-export interface FormattedResult {
-  [token: string]: FormattedPosition;
-}
+export type FormattedResult = FormattedPosition[];
 
 export interface CopinApiResponse {
   positions: Position[];
@@ -59,6 +63,28 @@ export interface EnvironmentVars {
   COPIN_API_BASE: string;
   KV_NAMESPACE: KVNamespace;
   R2_BUCKET: R2Bucket;
+}
+
+export interface TokenPosition {
+  token: string;
+  total_positions: number;
+  percentage: string;
+  position: 'LONG' | 'SHORT';
+}
+
+export interface Analysis {
+  sentiment: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
+  confidence: number;
+  factors: string[];
+  tokenAddress: string;
+}
+
+export interface HistoricalAnalysis {
+  trendDirection: 'UP' | 'DOWN' | 'SIDEWAYS';
+  confidenceOverTime: {
+    timestamp: number;
+    confidence: number;
+  }[];
 }
 
 // Constants

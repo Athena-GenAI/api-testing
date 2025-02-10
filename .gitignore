@@ -217,4 +217,12 @@ dist/
 .__pycache__/._cursor
 .__pycache__/cursor/__pycache__
 .__pycache__/._cursor/__pycache__
-/__pycache__//\
+/__pycache__//
+
+.windsurf/
+.cursorconfig/
+.cursorrules
+.cursorcache
+.windsurf/__pycache__/
+.windsurf/._cursor
+.windsurf/._cursor/__pycache__
