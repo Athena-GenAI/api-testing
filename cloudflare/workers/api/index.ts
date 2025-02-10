@@ -548,7 +548,7 @@ export default {
             const processingTime = Date.now() - startTime;
             await recordMetrics(env, { processing_time: processingTime }, isDev);
             
-            return new Response(JSON.stringify(cachedData), {
+            return new Response(JSON.stringify(cachedData.data), {
               status: 200,
               headers: {
                 'Content-Type': 'application/json',
@@ -571,7 +571,11 @@ export default {
             const today = new Date().toISOString().split('T')[0];
             await env.SMART_MONEY_CACHE.put(
               `positions:${today}`,
-              JSON.stringify(processedData)
+              JSON.stringify({
+                data: processedData,
+                from_cache: false,
+                last_updated: new Date().toISOString()
+              })
             );
           }
 
@@ -651,7 +655,11 @@ export default {
         const processedPositions = await processPositionData(positions);
         await env.SMART_MONEY_CACHE.put(
           `positions:${new Date().toISOString().split('T')[0]}`,
-          JSON.stringify(processedPositions)
+          JSON.stringify({
+            data: processedPositions,
+            from_cache: false,
+            last_updated: new Date().toISOString()
+          })
         );
       }
       
@@ -694,7 +702,11 @@ async function updatePositions(env: Env): Promise<void> {
       const processedPositions = await processPositionData(positions);
       await env.SMART_MONEY_CACHE.put(
         `positions:${new Date().toISOString().split('T')[0]}`,
-        JSON.stringify(processedPositions)
+        JSON.stringify({
+          data: processedPositions,
+          from_cache: false,
+          last_updated: new Date().toISOString()
+        })
       );
     }
     
@@ -863,9 +875,9 @@ async function processPositionData(positions: Position[]): Promise<TokenPosition
 function processPositionStatistics(positions: Position[]): {
   long_count: number;
   short_count: number;
+  total_positions: number;
   long_percentage: number;
   short_percentage: number;
-  total_positions: number;
 } {
   const stats = {
     long_count: 0,
