@@ -1,4 +1,4 @@
-name = "smart-money-api"
+name = "smart-money-api-production"
 main = "workers/api/index.ts"
 compatibility_date = "2025-02-06"
 
@@ -20,8 +20,10 @@ command = "npm run build"
 crons = ["0 * * * *"]  # Run every hour
 
 [env.production]
-name = "smart-money-api"
-route = { pattern = "api.0xathena.ai/smart-money/*", zone_name = "0xathena.ai" }
+name = "smart-money-api-production"
+routes = [
+  { pattern = "api.0xathena.ai/smart-money/*", zone_name = "0xathena.ai" }
+]
 workers_dev = false
 kv_namespaces = [
   { binding = "SMART_MONEY_CACHE", id = "4146d86894e74779a14b83e2124c4194" }
@@ -43,17 +45,21 @@ bucket_name = 'smart-money-data-dev'
 [env.staging]
 name = "smart-money-api-staging"
 workers_dev = true
-route = "staging.api.0xathena.ai/smart-money/*"
+routes = [
+  { pattern = "staging.api.0xathena.ai/smart-money/*", zone_name = "0xathena.ai" }
+]
 kv_namespaces = [
   { binding = "SMART_MONEY_CACHE", id = "4146d86894e74779a14b83e2124c4194" }
 ]
 [[env.staging.r2_buckets]]
 binding = 'SMART_MONEY_BUCKET'
-bucket_name = 'smart-money-data-dev'
+bucket_name = 'smart-money-data-staging'
 
 [env.dev]
 name = "smart-money-api-dev"
-route = { pattern = "dev.api.0xathena.ai/smart-money/*", zone_name = "0xathena.ai" }
+routes = [
+  { pattern = "dev.api.0xathena.ai/smart-money/*", zone_name = "0xathena.ai" }
+]
 workers_dev = true
 kv_namespaces = [
   { binding = "SMART_MONEY_CACHE", id = "4146d86894e74779a14b83e2124c4194" }
