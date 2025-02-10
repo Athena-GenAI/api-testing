@@ -514,13 +514,23 @@ function processPositionStatistics(positions: Position[]): {
   };
 }
 
+/**
+ * Metrics data structure for tracking API performance and usage
+ */
 interface MetricsData {
-  total_requests: number;
-  cache_hits: number;
-  api_errors: number;
-  processing_time: number;
+  total_requests: number;  // Total number of API requests
+  cache_hits: number;      // Number of cache hits
+  api_errors: number;      // Number of API errors
+  processing_time: number; // Total processing time in milliseconds
+  avg_response_time: number; // Average response time in milliseconds
 }
 
+/**
+ * Records metrics for monitoring API performance and usage
+ * @param env - Cloudflare environment bindings
+ * @param metrics - Partial metrics data to record
+ * @param isDev - Whether the request is from development environment
+ */
 async function recordMetrics(env: Env, metrics: Partial<MetricsData>, isDev: boolean) {
   const today = new Date().toISOString().split('T')[0];
   const env_prefix = isDev ? 'dev' : 'prod';
@@ -531,20 +541,30 @@ async function recordMetrics(env: Env, metrics: Partial<MetricsData>, isDev: boo
     total_requests: 0,
     cache_hits: 0,
     api_errors: 0,
-    processing_time: 0
+    processing_time: 0,
+    avg_response_time: 0
   };
 
   // Update metrics
-  Object.assign(currentMetrics, {
+  const updatedMetrics = {
     ...currentMetrics,
-    ...metrics
-  });
+    ...metrics,
+  };
+
+  // Calculate average response time
+  if (metrics.processing_time !== undefined) {
+    const totalTime = currentMetrics.processing_time + metrics.processing_time;
+    const totalRequests = currentMetrics.total_requests + (metrics.total_requests || 0);
+    updatedMetrics.avg_response_time = totalTime / totalRequests;
+  }
 
   // Store updated metrics
   await env.SMART_MONEY_CACHE.put(
     `${env_prefix}:metrics:${today}`,
-    JSON.stringify(currentMetrics)
+    JSON.stringify(updatedMetrics)
   );
+
+  return updatedMetrics;
 }
 
 /**
@@ -576,11 +596,63 @@ export default {
         case 'metrics': {
           const today = new Date().toISOString().split('T')[0];
           const env_prefix = isDev ? 'dev' : 'prod';
-          const metrics = await env.SMART_MONEY_CACHE.get(`${env_prefix}:metrics:${today}`);
+          
+          // Get metrics for the last 7 days
+          const days = Array.from({ length: 7 }, (_, i) => {
+            const date = new Date();
+            date.setDate(date.getDate() - i);
+            return date.toISOString().split('T')[0];
+          });
+
+          const metricsPromises = days.map(async (date) => {
+            const metrics = await env.SMART_MONEY_CACHE.get(`${env_prefix}:metrics:${date}`);
+            return {
+              date,
+              metrics: metrics ? JSON.parse(metrics) : null
+            };
+          });
+
+          const allMetrics = await Promise.all(metricsPromises);
+          
+          // Calculate aggregated metrics
+          const aggregated = allMetrics.reduce((acc, { metrics }) => {
+            if (!metrics) return acc;
+            return {
+              total_requests: acc.total_requests + metrics.total_requests,
+              cache_hits: acc.cache_hits + metrics.cache_hits,
+              api_errors: acc.api_errors + metrics.api_errors,
+              processing_time: acc.processing_time + metrics.processing_time,
+              avg_response_time: acc.avg_response_time + (metrics.avg_response_time || 0)
+            };
+          }, {
+            total_requests: 0,
+            cache_hits: 0,
+            api_errors: 0,
+            processing_time: 0,
+            avg_response_time: 0
+          });
+
+          // Calculate overall averages
+          const daysWithData = allMetrics.filter(m => m.metrics).length;
+          if (daysWithData > 0) {
+            aggregated.avg_response_time /= daysWithData;
+          }
           
           return new Response(JSON.stringify({
-            data: metrics ? JSON.parse(metrics) : null,
-            date: today,
+            current: allMetrics[0].metrics,
+            historical: allMetrics.slice(1),
+            aggregated: {
+              ...aggregated,
+              cache_hit_rate: aggregated.total_requests ? 
+                (aggregated.cache_hits / aggregated.total_requests * 100).toFixed(2) + '%' : '0%',
+              error_rate: aggregated.total_requests ? 
+                (aggregated.api_errors / aggregated.total_requests * 100).toFixed(2) + '%' : '0%',
+              avg_response_time_ms: Math.round(aggregated.avg_response_time)
+            },
+            period: {
+              start: days[days.length - 1],
+              end: days[0]
+            },
             environment: isDev ? 'development' : 'production'
           }), {
             status: 200,
