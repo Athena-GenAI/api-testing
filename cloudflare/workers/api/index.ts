@@ -538,7 +538,15 @@ export default {
       if (!isDev) {
         const today = new Date().toISOString().split('T')[0];
         console.log('Checking cache for date:', today);
-        cachedData = await env.SMART_MONEY_CACHE.get(`positions:${today}`, 'json');
+        cachedData = await env.SMART_MONEY_CACHE.get(`positions:${today}`);
+        if (cachedData) {
+          try {
+            cachedData = JSON.parse(cachedData);
+          } catch (e) {
+            console.error('Error parsing cached data:', e);
+            cachedData = null;
+          }
+        }
         console.log('Cache hit:', !!cachedData);
       }
 
@@ -588,10 +596,12 @@ export default {
       });
     } catch (error) {
       console.error('Error processing request:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorStack = error instanceof Error ? error.stack : undefined;
       return new Response(JSON.stringify({
         error: 'Internal server error',
-        message: error.message,
-        stack: isDev ? error.stack : undefined
+        message: errorMessage,
+        stack: isDev ? errorStack : undefined
       }), {
         status: 500,
         headers: {
