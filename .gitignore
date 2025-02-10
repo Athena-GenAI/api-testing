@@ -208,6 +208,14 @@ dist/
 # CMake
 .cmake/
 
+# VS Code
+.vscode/
+.history/
+*.code-workspace
+
+# Windsurf
+.windsurf/
+.windsurfrules
 
 # Cursor
 .cursorconfig

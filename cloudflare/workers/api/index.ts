@@ -5,67 +5,82 @@
  * across various DeFi protocols. It aggregates position data from the Copin API and provides
  * insights into market sentiment through position analysis.
  * 
- * Features:
- * - Tracks positions for BTC, ETH, SOL, and other tokens
- * - Identifies market anomalies (extreme long/short positions)
- * - Caches results for performance
- * - Updates data automatically via cron trigger
+ * Key Features:
+ * - Real-time position tracking for major cryptocurrencies
+ * - Smart money wallet analysis
+ * - Cross-protocol position aggregation
+ * - Automated data updates via cron
+ * - Performance monitoring and metrics
+ * - Caching for optimal performance
+ * 
+ * Architecture:
+ * - Uses Cloudflare Workers for serverless execution
+ * - R2 for persistent storage
+ * - KV for caching
+ * - Scheduled updates via cron triggers
  * 
  * @module SmartMoneyAPI
+ * @version 1.0.0
+ * @since 2025-02-10
  */
 
 import { Env } from './types';
 import { CopinService } from './services/copinService';
 
-// Constants
 /**
- * Cache key for storing position data
+ * Configuration Constants
+ * These values define the core behavior of the API
+ */
+
+/**
+ * Cache configuration for position data
+ * @const {string} CACHE_KEY - Key for storing position data in KV
+ * @const {number} CACHE_TTL - Cache time-to-live in seconds (1 hour)
  */
 const CACHE_KEY = 'smart_money_positions';
+const CACHE_TTL = 60 * 60 * 1;
 
 /**
- * Cache TTL in seconds
- */
-const CACHE_TTL = 60 * 60 * 1; // 1 hours in seconds
-
-/**
- * Copin API base URL
+ * Copin API Configuration
+ * @const {string} COPIN_BASE_URL - Base URL for Copin API
+ * @const {string} COPIN_API_KEY - API key for authentication
  */
 const COPIN_BASE_URL = "https://api.copin.io";
-
-/**
- * Copin API key
- */
 const COPIN_API_KEY = "495684f1-a50a-4de1-b693-86b343c7aaf1";
 
 /**
- * R2 key for storing position data
+ * Storage Configuration
+ * @const {string} R2_KEY - Key for storing position data in R2
  */
 const R2_KEY = 'positions.json';
 
 /**
- * Supported protocols for position tracking
+ * Supported DeFi Protocols
+ * List of protocols we track for position data
+ * @const {string[]} SUPPORTED_PROTOCOLS
  */
 const SUPPORTED_PROTOCOLS = [
-  "KWENTA",
-  "GMX",
-  "GNS", 
-  "POLYNOMIAL",
-  "SYNTHETIX",
-  "AEVO",
-  "HYPERLIQUID",
-  "VERTEX",
-  "PERP",
-  "GMXV2",
-  "LYRA"    
+  "KWENTA",    // Synthetix derivatives
+  "GMX",       // Perpetual DEX
+  "GNS",       // Gains Network
+  "POLYNOMIAL", // Polynomial Protocol
+  "SYNTHETIX", // Synthetix
+  "AEVO",      // Aevo Exchange
+  "HYPERLIQUID", // HyperLiquid
+  "VERTEX",    // Vertex Protocol
+  "PERP",      // Perpetual Protocol
+  "GMXV2",     // GMX Version 2
+  "LYRA"       // Lyra Options
 ];
 
-// Token address to symbol mapping
 /**
- * Mapping of token addresses to human-readable symbols
+ * Token Address to Symbol Mapping
+ * Maps blockchain addresses to human-readable token symbols
+ * Organized by category for better maintenance
+ * @const {Object.<string, string>} TOKEN_SYMBOLS
  */
 const TOKEN_SYMBOLS: { [key: string]: string } = {
-  // Existing DeFi tokens
+  // Core DeFi Tokens
   '0x7fc66500c84a76ad7e9c93437bfc5ac33e2ddae9': 'AAVE',
   '0x0d8775f648430679a709e98d2b0cb6250d2887ef': 'BAT',
   '0xc00e94cb662c3520282e6f5717214004a7f26888': 'COMP',
@@ -78,7 +93,7 @@ const TOKEN_SYMBOLS: { [key: string]: string } = {
   '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599': 'WBTC',
   '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2': 'WETH',
   
-  // Protocol tokens
+  // Protocol Tokens
   '0x2b3bb4c683bfc5239b029131eef3b1d214478d93': 'SNX',
   '0x59b007e9ea8f89b069c43f8f45834d30853e3699': 'DYDX',
   '0x6110df298b411a46d6edce72f5caca9ad826c1de': 'AEVO',
@@ -102,9 +117,11 @@ const TOKEN_SYMBOLS: { [key: string]: string } = {
   '0x6853ea96ff216fab11d2d930ce3c508556a4bdc4': 'GRIFFAIN_V2'
 };
 
-// List of smart money perpetual trader wallets
 /**
- * List of smart money perpetual trader wallets
+ * Smart Money Wallets
+ * Curated list of addresses known for profitable trading
+ * These addresses are monitored for position changes
+ * @const {string[]} TRADER_WALLETS
  */
 const TRADER_WALLETS = [
   "0x0171d947ee6ce0f487490bD4f8D89878FF2d88BA",
@@ -160,14 +177,21 @@ const TRADER_WALLETS = [
   "0x4535B3157eFa05466D5095309C6F12FE3be237dc"
 ];
 
-// Type definitions
 /**
- * Type alias for protocol names
+ * Type Definitions
+ * Core data structures used throughout the API
+ */
+
+/**
+ * Protocol Type
+ * @typedef {string} Protocol - Name of supported protocol
  */
 type Protocol = string;
 
 /**
- * Interface for a position object
+ * Position Interface
+ * Represents a single trading position
+ * @interface Position
  */
 interface Position {
   /**
@@ -213,7 +237,9 @@ interface Position {
 }
 
 /**
- * Interface for a position response object
+ * Position Response Interface
+ * API response format for position queries
+ * @interface PositionResponse
  */
 interface PositionResponse {
   /**
@@ -277,7 +303,9 @@ interface PositionResponse {
 }
 
 /**
- * Interface for a token position object
+ * Token Position Interface
+ * Aggregated position data for a specific token
+ * @interface TokenPosition
  */
 interface TokenPosition {
   /**
@@ -299,7 +327,9 @@ interface TokenPosition {
 }
 
 /**
- * Interface for an API response object
+ * API Response Interface
+ * Standard response format for all API endpoints
+ * @interface ApiResponse
  */
 interface ApiResponse {
   /**
@@ -317,7 +347,9 @@ interface ApiResponse {
 }
 
 /**
- * Interface for a cache entry object
+ * Cache Entry Interface
+ * Structure for cached position data
+ * @interface CacheEntry
  */
 interface CacheEntry {
   /**
@@ -331,7 +363,9 @@ interface CacheEntry {
 }
 
 /**
- * Interface for a Copin response object
+ * Copin Response Interface
+ * Expected response format from Copin API
+ * @interface CopinResponse
  */
 interface CopinResponse {
   /**
@@ -373,210 +407,35 @@ interface CopinResponse {
   }[];
 }
 
-// CORS headers
 /**
- * CORS headers for API responses
+ * CORS Headers
+ * Standard headers for cross-origin requests
+ * @const {Object} corsHeaders
  */
-const CORS_HEADERS = {
+const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, DELETE',
   'Access-Control-Allow-Headers': 'Content-Type',
 };
 
-// Process position data from all sources and calculate statistics
 /**
- * Get all positions from R2 storage
- * @param env Environment variables and bindings
- * @returns Array of positions
- */
-async function getAllPositions(env: Env): Promise<Position[]> {
-  try {
-    // Get data from R2
-    const object = await env.SMART_MONEY_BUCKET.get(R2_KEY);
-    if (!object) {
-      console.error('No data available in R2');
-      return [];
-    }
-
-    const data = await object.json() as Position[];
-    return data;
-  } catch (error) {
-    console.error('Error getting positions:', error);
-    throw error;
-  }
-}
-
-/**
- * Process position data to calculate statistics for each token
- * @param positions Array of positions to process
- * @returns Array of token positions with statistics
- */
-async function processPositionData(positions: Position[]): Promise<TokenPosition[]> {
-  try {
-    console.log('Processing positions:', positions.length);
-    
-    // Group positions by token
-    const positionsByToken: { [key: string]: Position[] } = {};
-    for (const position of positions) {
-      let token = position.indexToken;
-      
-      // Handle special token formats
-      if (token.includes('HYPERLIQUID-')) {
-        token = token.split('-')[1];
-      } else if (position.protocol === 'GMX_V2') {
-        // Use token symbol mapping for GMX_V2
-        token = TOKEN_SYMBOLS[token.toLowerCase()] || token;
-      }
-      
-      if (!positionsByToken[token]) {
-        positionsByToken[token] = [];
-      }
-      positionsByToken[token].push(position);
-    }
-
-    // Calculate statistics for each token
-    const tokenStats: TokenPosition[] = [];
-    for (const [token, tokenPositions] of Object.entries(positionsByToken)) {
-      const stats = processPositionStatistics(tokenPositions);
-      if (stats.total_positions >= 5) {
-        // Determine position type based on long percentage
-        let position: 'LONG' | 'SHORT' | 'NEUTRAL';
-        let percentage: number;
-
-        if (stats.long_percentage === 50) {
-          position = 'NEUTRAL';
-          percentage = 50;
-        } else {
-          position = stats.long_percentage > 50 ? 'LONG' : 'SHORT';
-          percentage = position === 'LONG' ? stats.long_percentage : stats.short_percentage;
-        }
-
-        tokenStats.push({
-          token,
-          total_positions: stats.total_positions,
-          percentage: `${stats.long_percentage.toFixed(2)}%`,
-          position
-        });
-      }
-    }
-
-    // Priority tokens in specific order (BTC, ETH, SOL)
-    const priorityTokens = ['BTC', 'ETH', 'SOL'];
-    const result: TokenPosition[] = [];
-
-    // First add priority tokens in order if they exist
-    for (const token of priorityTokens) {
-      const stat = tokenStats.find(s => s.token === token);
-      if (stat) {
-        result.push(stat);
-      }
-    }
-
-    // Then add other tokens with at least 5 positions
-    const otherTokens = tokenStats
-      .filter(stat => !priorityTokens.includes(stat.token))
-      .sort((a, b) => b.total_positions - a.total_positions)
-      .slice(0, 3);
-
-    // Return exactly 6 tokens max (3 priority + up to 3 others with >= 5 positions)
-    return [...result, ...otherTokens].slice(0, 6);
-  } catch (error) {
-    console.error('Error processing position data:', error);
-    throw error;
-  }
-}
-
-/**
- * Process position statistics
- * @param positions Array of positions to process
- * @returns Position statistics
- */
-function processPositionStatistics(positions: Position[]): {
-  long_count: number;
-  short_count: number;
-  long_percentage: number;
-  short_percentage: number;
-  total_positions: number;
-} {
-  const long_count = positions.filter(p => p.isLong || p.type === 'LONG' || p.side === 'LONG').length;
-  const short_count = positions.filter(p => !p.isLong || p.type === 'SHORT' || p.side === 'SHORT').length;
-  const total_positions = positions.length;
-  
-  const long_percentage = Number(((long_count / total_positions) * 100).toFixed(2));
-  const short_percentage = Number(((short_count / total_positions) * 100).toFixed(2));
-
-  return {
-    long_count,
-    short_count,
-    long_percentage,
-    short_percentage,
-    total_positions,
-  };
-}
-
-/**
- * Metrics data structure for tracking API performance and usage
- */
-interface MetricsData {
-  total_requests: number;  // Total number of API requests
-  cache_hits: number;      // Number of cache hits
-  api_errors: number;      // Number of API errors
-  processing_time: number; // Total processing time in milliseconds
-  avg_response_time: number; // Average response time in milliseconds
-}
-
-/**
- * Records metrics for monitoring API performance and usage
- * @param env - Cloudflare environment bindings
- * @param metrics - Partial metrics data to record
- * @param isDev - Whether the request is from development environment
- */
-async function recordMetrics(env: Env, metrics: Partial<MetricsData>, isDev: boolean) {
-  const today = new Date().toISOString().split('T')[0];
-  const env_prefix = isDev ? 'dev' : 'prod';
-  
-  // Get existing metrics
-  const existing = await env.SMART_MONEY_CACHE.get(`${env_prefix}:metrics:${today}`);
-  const currentMetrics: MetricsData = existing ? JSON.parse(existing) : {
-    total_requests: 0,
-    cache_hits: 0,
-    api_errors: 0,
-    processing_time: 0,
-    avg_response_time: 0
-  };
-
-  // Update metrics
-  const updatedMetrics = {
-    ...currentMetrics,
-    ...metrics,
-  };
-
-  // Calculate average response time
-  if (metrics.processing_time !== undefined) {
-    const totalTime = currentMetrics.processing_time + metrics.processing_time;
-    const totalRequests = currentMetrics.total_requests + (metrics.total_requests || 0);
-    updatedMetrics.avg_response_time = totalTime / totalRequests;
-  }
-
-  // Store updated metrics
-  await env.SMART_MONEY_CACHE.put(
-    `${env_prefix}:metrics:${today}`,
-    JSON.stringify(updatedMetrics)
-  );
-
-  return updatedMetrics;
-}
-
-/**
- * Cloudflare Worker fetch handler
- * Processes HTTP requests to the API endpoints
- * 
- * @param {Request} request - HTTP request
- * @param {Env} env - Environment variables and bindings
- * @param {ExecutionContext} ctx - Execution context
- * @returns {Promise<Response>} HTTP response
+ * Worker Implementation
+ * Main API functionality and request handling
  */
 export default {
+  /**
+   * Fetch Handler
+   * Processes incoming HTTP requests
+   * 
+   * Supports endpoints:
+   * - GET /token-stats: Token position statistics
+   * - GET /metrics: API performance metrics
+   * 
+   * @param {Request} request - HTTP request
+   * @param {Env} env - Environment bindings
+   * @param {ExecutionContext} ctx - Execution context
+   * @returns {Promise<Response>} HTTP response
+   */
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const startTime = Date.now();
     // Only check cache in production environment
@@ -659,7 +518,7 @@ export default {
             status: 200,
             headers: {
               'Content-Type': 'application/json',
-              ...CORS_HEADERS,
+              ...corsHeaders,
             },
           });
         }
@@ -689,15 +548,11 @@ export default {
             const processingTime = Date.now() - startTime;
             await recordMetrics(env, { processing_time: processingTime }, isDev);
             
-            return new Response(JSON.stringify({
-              data: cachedData,
-              from_cache: true,
-              last_updated: new Date().toISOString()
-            }), {
+            return new Response(JSON.stringify(cachedData.data), {
               status: 200,
               headers: {
                 'Content-Type': 'application/json',
-                ...CORS_HEADERS,
+                ...corsHeaders,
               },
             });
           }
@@ -716,22 +571,22 @@ export default {
             const today = new Date().toISOString().split('T')[0];
             await env.SMART_MONEY_CACHE.put(
               `positions:${today}`,
-              JSON.stringify(processedData)
+              JSON.stringify({
+                data: processedData,
+                from_cache: false,
+                last_updated: new Date().toISOString()
+              })
             );
           }
 
           const processingTime = Date.now() - startTime;
           await recordMetrics(env, { processing_time: processingTime }, isDev);
 
-          return new Response(JSON.stringify({
-            data: processedData,
-            from_cache: false,
-            last_updated: new Date().toISOString()
-          }), {
+          return new Response(JSON.stringify(processedData), {
             status: 200,
             headers: {
               'Content-Type': 'application/json',
-              ...CORS_HEADERS,
+              ...corsHeaders,
             },
           });
         }
@@ -744,7 +599,7 @@ export default {
             status: 404,
             headers: {
               'Content-Type': 'application/json',
-              ...CORS_HEADERS,
+              ...corsHeaders,
             },
           });
       }
@@ -767,12 +622,25 @@ export default {
         status: 500,
         headers: {
           'Content-Type': 'application/json',
-          ...CORS_HEADERS,
+          ...corsHeaders,
         },
       });
     }
   },
 
+  /**
+   * Scheduled Handler
+   * Processes scheduled tasks (cron triggers)
+   * 
+   * Tasks:
+   * - Update position data
+   * - Clean up old metrics
+   * - Verify cache integrity
+   * 
+   * @param {ScheduledEvent} event - Scheduled event details
+   * @param {Env} env - Environment bindings
+   * @param {ExecutionContext} ctx - Execution context
+   */
   async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
     console.log('Starting scheduled task to update position data');
     try {
@@ -787,7 +655,11 @@ export default {
         const processedPositions = await processPositionData(positions);
         await env.SMART_MONEY_CACHE.put(
           `positions:${new Date().toISOString().split('T')[0]}`,
-          JSON.stringify(processedPositions)
+          JSON.stringify({
+            data: processedPositions,
+            from_cache: false,
+            last_updated: new Date().toISOString()
+          })
         );
       }
       
@@ -799,8 +671,20 @@ export default {
 };
 
 /**
- * Update positions
- * @param env Environment variables and bindings
+ * Helper Functions
+ * Utility functions for data processing and API operations
+ */
+
+/**
+ * Update Positions
+ * Fetches fresh position data from Copin API
+ * 
+ * Process:
+ * 1. Fetch data for each trader/protocol combination
+ * 2. Process and aggregate positions
+ * 3. Store in R2 and update cache
+ * 
+ * @param {Env} env - Environment bindings
  */
 async function updatePositions(env: Env): Promise<void> {
   try {
@@ -818,7 +702,11 @@ async function updatePositions(env: Env): Promise<void> {
       const processedPositions = await processPositionData(positions);
       await env.SMART_MONEY_CACHE.put(
         `positions:${new Date().toISOString().split('T')[0]}`,
-        JSON.stringify(processedPositions)
+        JSON.stringify({
+          data: processedPositions,
+          from_cache: false,
+          last_updated: new Date().toISOString()
+        })
       );
     }
     
@@ -829,11 +717,14 @@ async function updatePositions(env: Env): Promise<void> {
 }
 
 /**
- * Fetch position data for a specific trader and protocol.
+ * Fetch Position Data
+ * Retrieves positions for a specific trader and protocol
  * 
- * @param {string} trader_id - Trader ID
+ * Includes retry logic and rate limiting
+ * 
+ * @param {string} trader_id - Trader wallet address
  * @param {string} protocol - Protocol name
- * @param {Env} env - Environment variables and bindings
+ * @param {Env} env - Environment bindings
  * @returns {Promise<Position[]>} Array of positions
  */
 async function fetchPositionData(trader_id: string, protocol: string, env: Env): Promise<Position[]> {
@@ -848,21 +739,225 @@ async function fetchPositionData(trader_id: string, protocol: string, env: Env):
 }
 
 /**
- * Sleep for a specified number of milliseconds
+ * Sleep Function
+ * Utility for implementing delays
+ * Used for rate limiting and retries
  * 
  * @param {number} ms - Milliseconds to sleep
- * @returns {Promise<void>} Resolves after sleeping
+ * @returns {Promise<void>}
  */
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 /**
- * Check if address is a dYdX address
+ * dYdX Address Check
+ * Validates if an address is a dYdX address
+ * Used for protocol-specific handling
  * 
  * @param {string} address - Address to check
- * @returns {boolean} True if address is a dYdX address
+ * @returns {boolean} True if valid dYdX address
  */
 function isDydxAddress(address: string): boolean {
   return address.startsWith('dydx1');
+}
+
+/**
+ * Get All Positions
+ * Retrieves all positions from R2 storage
+ * 
+ * @param {Env} env - Environment bindings
+ * @returns {Promise<Position[]>} Array of positions
+ */
+async function getAllPositions(env: Env): Promise<Position[]> {
+  try {
+    // Get data from R2
+    const object = await env.SMART_MONEY_BUCKET.get(R2_KEY);
+    if (!object) {
+      console.error('No data available in R2');
+      return [];
+    }
+
+    const data = await object.json() as Position[];
+    return data;
+  } catch (error) {
+    console.error('Error getting positions:', error);
+    throw error;
+  }
+}
+
+/**
+ * Process Position Data
+ * Processes position data to calculate statistics for each token
+ * 
+ * @param {Position[]} positions - Array of positions to process
+ * @returns {Promise<TokenPosition[]>} Array of token positions with statistics
+ */
+async function processPositionData(positions: Position[]): Promise<TokenPosition[]> {
+  try {
+    // Group positions by token
+    const positionsByToken: { [key: string]: Position[] } = {};
+    for (const position of positions) {
+      let token = position.indexToken;
+      
+      // Handle special token formats
+      if (token.includes('HYPERLIQUID-')) {
+        token = token.split('-')[1];
+      } else if (position.protocol === 'GMX_V2') {
+        token = TOKEN_SYMBOLS[token.toLowerCase()] || token;
+      }
+      
+      // Remove $ prefix and standardize format
+      token = token.replace('$', '').toUpperCase();
+      
+      if (!positionsByToken[token]) {
+        positionsByToken[token] = [];
+      }
+      positionsByToken[token].push(position);
+    }
+
+    // Calculate statistics for each token
+    const tokenStats: TokenPosition[] = [];
+    for (const [token, tokenPositions] of Object.entries(positionsByToken)) {
+      const stats = processPositionStatistics(tokenPositions);
+      if (stats.total_positions >= 5) {
+        // Determine position type based on long percentage
+        let position: 'LONG' | 'SHORT' | 'NEUTRAL';
+        
+        if (stats.long_percentage === 50) {
+          position = 'NEUTRAL';
+        } else {
+          position = stats.long_percentage > 50 ? 'LONG' : 'SHORT';
+        }
+
+        tokenStats.push({
+          token,
+          total_positions: stats.total_positions,
+          percentage: `${Math.round(stats.long_percentage)}%`,
+          position
+        });
+      }
+    }
+
+    // Priority tokens in specific order (BTC, ETH, SOL)
+    const priorityTokens = ['BTC', 'ETH', 'SOL'];
+    const result: TokenPosition[] = [];
+
+    // First add priority tokens in order if they exist
+    for (const token of priorityTokens) {
+      const stat = tokenStats.find(s => s.token === token);
+      if (stat) {
+        result.push(stat);
+      }
+    }
+
+    // Then add other tokens with at least 5 positions
+    const otherTokens = tokenStats
+      .filter(stat => !priorityTokens.includes(stat.token))
+      .sort((a, b) => b.total_positions - a.total_positions)
+      .slice(0, 3);
+
+    // Return exactly 6 tokens max (3 priority + up to 3 others with >= 5 positions)
+    return [...result, ...otherTokens].slice(0, 6);
+  } catch (error) {
+    console.error('Error processing position data:', error);
+    throw error;
+  }
+}
+
+/**
+ * Process Position Statistics
+ * Calculates statistics for a given array of positions
+ * 
+ * @param {Position[]} positions - Array of positions to process
+ * @returns {{ long_count: number, short_count: number, long_percentage: number, short_percentage: number, total_positions: number }} Position statistics
+ */
+function processPositionStatistics(positions: Position[]): {
+  long_count: number;
+  short_count: number;
+  total_positions: number;
+  long_percentage: number;
+  short_percentage: number;
+} {
+  const stats = {
+    long_count: 0,
+    short_count: 0,
+    total_positions: positions.length,
+    long_percentage: 0,
+    short_percentage: 0
+  };
+
+  // Count long and short positions
+  for (const position of positions) {
+    if (position.isLong || position.type === 'LONG' || position.side === 'LONG') {
+      stats.long_count++;
+    } else {
+      stats.short_count++;
+    }
+  }
+
+  // Calculate percentages
+  if (stats.total_positions > 0) {
+    stats.long_percentage = (stats.long_count / stats.total_positions) * 100;
+    stats.short_percentage = (stats.short_count / stats.total_positions) * 100;
+  }
+
+  return stats;
+}
+
+/**
+ * Record Metrics
+ * Records metrics for monitoring API performance and usage
+ * 
+ * @param {Env} env - Environment bindings
+ * @param {Partial<MetricsData>} metrics - Partial metrics data to record
+ * @param {boolean} isDev - Whether the request is from development environment
+ */
+async function recordMetrics(env: Env, metrics: Partial<MetricsData>, isDev: boolean) {
+  const today = new Date().toISOString().split('T')[0];
+  const env_prefix = isDev ? 'dev' : 'prod';
+  
+  // Get existing metrics
+  const existing = await env.SMART_MONEY_CACHE.get(`${env_prefix}:metrics:${today}`);
+  const currentMetrics: MetricsData = existing ? JSON.parse(existing) : {
+    total_requests: 0,
+    cache_hits: 0,
+    api_errors: 0,
+    processing_time: 0,
+    avg_response_time: 0
+  };
+
+  // Update metrics
+  const updatedMetrics = {
+    ...currentMetrics,
+    ...metrics,
+  };
+
+  // Calculate average response time
+  if (metrics.processing_time !== undefined) {
+    const totalTime = currentMetrics.processing_time + metrics.processing_time;
+    const totalRequests = currentMetrics.total_requests + (metrics.total_requests || 0);
+    updatedMetrics.avg_response_time = totalTime / totalRequests;
+  }
+
+  // Store updated metrics
+  await env.SMART_MONEY_CACHE.put(
+    `${env_prefix}:metrics:${today}`,
+    JSON.stringify(updatedMetrics)
+  );
+
+  return updatedMetrics;
+}
+
+/**
+ * Metrics Data Structure
+ * Structure for tracking API performance and usage
+ * @interface MetricsData
+ */
+interface MetricsData {
+  total_requests: number;  // Total number of API requests
+  cache_hits: number;      // Number of cache hits
+  api_errors: number;      // Number of API errors
+  processing_time: number; // Total processing time in milliseconds
+  avg_response_time: number; // Average response time in milliseconds
 }
