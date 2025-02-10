@@ -32,8 +32,7 @@ bucket_name = 'smart-money-data'
 
 [env.development]
 name = "smart-money-api-dev"
-route = { pattern = "dev-api.0xathena.ai/smart-money/*", zone_name = "0xathena.ai" }
-workers_dev = true
+workers_dev = true  # This will give us a *.workers.dev URL
 kv_namespaces = [
   { binding = "SMART_MONEY_CACHE", id = "4146d86894e74779a14b83e2124c4194" }
 ]
