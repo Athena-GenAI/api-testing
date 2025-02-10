@@ -13,16 +13,6 @@ binding = 'SMART_MONEY_BUCKET'
 bucket_name = 'smart-money-data'
 preview_bucket_name = 'smart-money-data-dev'
 
-# Add D1 database
-[[d1_databases]]
-binding = "DB"
-database_name = "smart-money-db"
-database_id = "40727d9b-b76b-4b98-8798-9661a75b1f78"
-
-# Add Workers AI
-[ai]
-binding = "AI"
-
 [build]
 command = "npm run build"
 
@@ -30,37 +20,25 @@ command = "npm run build"
 crons = ["0 * * * *"]  # Run every hour
 
 [env.production]
-name = "smart-money-api-production"
+name = "smart-money-api"
 route = { pattern = "api.0xathena.ai/smart-money/*", zone_name = "0xathena.ai" }
 workers_dev = false
-deployment_protection = true
 kv_namespaces = [
   { binding = "SMART_MONEY_CACHE", id = "4146d86894e74779a14b83e2124c4194" }
 ]
 [[env.production.r2_buckets]]
 binding = 'SMART_MONEY_BUCKET'
 bucket_name = 'smart-money-data'
-[[env.production.d1_databases]]
-binding = "DB"
-database_id = "40727d9b-b76b-4b98-8798-9661a75b1f78"
-[env.production.ai]
-binding = "AI"
 
 [env.development]
-name = "smart-money-api-development"
-workers_dev = true
-route = { pattern = "dev-api.0xathena.ai/smart-money/*", zone_name = "0xathena.ai" }
+name = "smart-money-api-dev"
+workers_dev = true  # This will give us a *.workers.dev URL
 kv_namespaces = [
   { binding = "SMART_MONEY_CACHE", id = "4146d86894e74779a14b83e2124c4194" }
 ]
 [[env.development.r2_buckets]]
 binding = 'SMART_MONEY_BUCKET'
 bucket_name = 'smart-money-data-dev'
-[[env.development.d1_databases]]
-binding = "DB"
-database_id = "40727d9b-b76b-4b98-8798-9661a75b1f78"
-[env.development.ai]
-binding = "AI"
 
 [env.staging]
 name = "smart-money-api-staging"
@@ -72,11 +50,6 @@ kv_namespaces = [
 [[env.staging.r2_buckets]]
 binding = 'SMART_MONEY_BUCKET'
 bucket_name = 'smart-money-data-dev'
-[[env.staging.d1_databases]]
-binding = "DB"
-database_id = "40727d9b-b76b-4b98-8798-9661a75b1f78"
-[env.staging.ai]
-binding = "AI"
 
 [env.dev]
 name = "smart-money-api-dev"
@@ -88,11 +61,6 @@ kv_namespaces = [
 [[env.dev.r2_buckets]]
 binding = 'SMART_MONEY_BUCKET'
 bucket_name = 'smart-money-data-dev'
-[[env.dev.d1_databases]]
-binding = "DB"
-database_id = "40727d9b-b76b-4b98-8798-9661a75b1f78"
-[env.dev.ai]
-binding = "AI"
 
 # wrangler.toml (wrangler v3.88.0^)
 [observability.logs]

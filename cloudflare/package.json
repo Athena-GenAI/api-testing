@@ -1,38 +1,29 @@
 {
   "name": "smart-money-api",
   "version": "1.0.0",
-  "description": "Smart Money Position Tracker API",
-  "main": "dist/index.js",
+  "description": "Smart Money API for tracking trader positions",
+  "main": "index.js",
   "scripts": {
     "build": "tsc",
-    "dev": "wrangler dev",
-    "deploy:dev": "wrangler deploy --env dev",
-    "deploy:staging": "wrangler deploy --env staging",
-    "deploy:prod": "wrangler deploy --env production",
-    "test": "jest --config jest.config.ts",
-    "test:watch": "jest --watch --config jest.config.ts",
-    "test:coverage": "jest --coverage --config jest.config.ts",
-    "lint": "eslint . --ext .ts",
-    "format": "prettier --write .",
-    "type-check": "tsc --noEmit"
+    "format": "prettier --write \"**/*.{js,ts}\"",
+    "lint": "eslint \"**/*.{js,ts}\"",
+    "test": "jest"
   },
   "dependencies": {
     "@cloudflare/workers-types": "^4.20240208.0",
     "typescript": "^5.3.3"
   },
   "devDependencies": {
-    "@jest/globals": "^29.7.0",
-    "@jest/types": "^29.6.3",
     "@types/jest": "^29.5.12",
-    "@types/node": "^22.13.1",
-    "@typescript-eslint/eslint-plugin": "^7.0.1",
-    "@typescript-eslint/parser": "^7.0.1",
-    "dotenv": "^16.4.7",
-    "eslint": "^8.56.0",
+    "@typescript-eslint/eslint-plugin": "^7.18.0",
+    "@typescript-eslint/parser": "^7.18.0",
+    "eslint": "^8.57.1",
     "jest": "^29.7.0",
-    "prettier": "^3.2.5",
+    "prettier": "^3.5.0",
     "ts-jest": "^29.1.2",
-    "ts-node": "^10.9.2",
-    "wrangler": "^3.22.3"
+    "wrangler": "^3.107.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }

@@ -16,7 +16,6 @@
 
 import { Env } from './types';
 import { CopinService } from './services/copinService';
-import { DatabaseService } from './services/databaseService';
 
 // Constants
 /**
@@ -516,6 +515,59 @@ function processPositionStatistics(positions: Position[]): {
 }
 
 /**
+ * Metrics data structure for tracking API performance and usage
+ */
+interface MetricsData {
+  total_requests: number;  // Total number of API requests
+  cache_hits: number;      // Number of cache hits
+  api_errors: number;      // Number of API errors
+  processing_time: number; // Total processing time in milliseconds
+  avg_response_time: number; // Average response time in milliseconds
+}
+
+/**
+ * Records metrics for monitoring API performance and usage
+ * @param env - Cloudflare environment bindings
+ * @param metrics - Partial metrics data to record
+ * @param isDev - Whether the request is from development environment
+ */
+async function recordMetrics(env: Env, metrics: Partial<MetricsData>, isDev: boolean) {
+  const today = new Date().toISOString().split('T')[0];
+  const env_prefix = isDev ? 'dev' : 'prod';
+  
+  // Get existing metrics
+  const existing = await env.SMART_MONEY_CACHE.get(`${env_prefix}:metrics:${today}`);
+  const currentMetrics: MetricsData = existing ? JSON.parse(existing) : {
+    total_requests: 0,
+    cache_hits: 0,
+    api_errors: 0,
+    processing_time: 0,
+    avg_response_time: 0
+  };
+
+  // Update metrics
+  const updatedMetrics = {
+    ...currentMetrics,
+    ...metrics,
+  };
+
+  // Calculate average response time
+  if (metrics.processing_time !== undefined) {
+    const totalTime = currentMetrics.processing_time + metrics.processing_time;
+    const totalRequests = currentMetrics.total_requests + (metrics.total_requests || 0);
+    updatedMetrics.avg_response_time = totalTime / totalRequests;
+  }
+
+  // Store updated metrics
+  await env.SMART_MONEY_CACHE.put(
+    `${env_prefix}:metrics:${today}`,
+    JSON.stringify(updatedMetrics)
+  );
+
+  return updatedMetrics;
+}
+
+/**
  * Cloudflare Worker fetch handler
  * Processes HTTP requests to the API endpoints
  * 
@@ -526,26 +578,85 @@ function processPositionStatistics(positions: Position[]): {
  */
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-    const url = new URL(request.url);
-    const path = url.pathname.replace('/smart-money/', '');
-
+    const startTime = Date.now();
+    // Only check cache in production environment
+    const isDev = request.url.includes('workers.dev') || 
+                 new URL(request.url).hostname.includes('localhost');
+    console.log(`Environment: ${isDev ? 'development' : 'production'}`);
+    
     try {
-      if (request.method === 'GET' && path === 'positions') {
-        // Get all positions
-        const positions = await getAllPositions(env);
-        return new Response(JSON.stringify(positions), {
-          headers: {
-            'Content-Type': 'application/json',
-            ...CORS_HEADERS,
-          },
-        });
-      } else if (request.method === 'GET' && path === 'token-stats') {
-        // Get token stats
-        const positions = await getAllPositions(env);
-        if (!positions || !Array.isArray(positions)) {
-          console.error('Invalid positions data:', positions);
-          return new Response(JSON.stringify({ error: 'Invalid positions data' }), {
-            status: 500,
+      const url = new URL(request.url);
+      const path = url.pathname.replace(/^\/smart-money\//, '');
+      console.log('Processing request for path:', path);
+      
+      // Record request
+      await recordMetrics(env, { total_requests: 1 }, isDev);
+
+      // Handle different endpoints
+      switch (path) {
+        case 'metrics': {
+          const today = new Date().toISOString().split('T')[0];
+          const env_prefix = isDev ? 'dev' : 'prod';
+          
+          // Get metrics for the last 7 days
+          const days = Array.from({ length: 7 }, (_, i) => {
+            const date = new Date();
+            date.setDate(date.getDate() - i);
+            return date.toISOString().split('T')[0];
+          });
+
+          const metricsPromises = days.map(async (date) => {
+            const metrics = await env.SMART_MONEY_CACHE.get(`${env_prefix}:metrics:${date}`);
+            return {
+              date,
+              metrics: metrics ? JSON.parse(metrics) : null
+            };
+          });
+
+          const allMetrics = await Promise.all(metricsPromises);
+          
+          // Calculate aggregated metrics
+          const aggregated = allMetrics.reduce((acc, { metrics }) => {
+            if (!metrics) return acc;
+            return {
+              total_requests: acc.total_requests + metrics.total_requests,
+              cache_hits: acc.cache_hits + metrics.cache_hits,
+              api_errors: acc.api_errors + metrics.api_errors,
+              processing_time: acc.processing_time + metrics.processing_time,
+              avg_response_time: acc.avg_response_time + (metrics.avg_response_time || 0)
+            };
+          }, {
+            total_requests: 0,
+            cache_hits: 0,
+            api_errors: 0,
+            processing_time: 0,
+            avg_response_time: 0
+          });
+
+          // Calculate overall averages
+          const daysWithData = allMetrics.filter(m => m.metrics).length;
+          if (daysWithData > 0) {
+            aggregated.avg_response_time /= daysWithData;
+          }
+          
+          return new Response(JSON.stringify({
+            current: allMetrics[0].metrics,
+            historical: allMetrics.slice(1),
+            aggregated: {
+              ...aggregated,
+              cache_hit_rate: aggregated.total_requests ? 
+                (aggregated.cache_hits / aggregated.total_requests * 100).toFixed(2) + '%' : '0%',
+              error_rate: aggregated.total_requests ? 
+                (aggregated.api_errors / aggregated.total_requests * 100).toFixed(2) + '%' : '0%',
+              avg_response_time_ms: Math.round(aggregated.avg_response_time)
+            },
+            period: {
+              start: days[days.length - 1],
+              end: days[0]
+            },
+            environment: isDev ? 'development' : 'production'
+          }), {
+            status: 200,
             headers: {
               'Content-Type': 'application/json',
               ...CORS_HEADERS,
@@ -553,31 +664,106 @@ export default {
           });
         }
         
-        const stats = await processPositionData(positions);
-        return new Response(JSON.stringify(stats), {
-          headers: {
-            'Content-Type': 'application/json',
-            ...CORS_HEADERS,
-          },
-        });
-      } else if (request.method === 'POST' && path === 'update') {
-        // Update positions
-        await updatePositions(env);
-        return new Response(JSON.stringify({ success: true, message: 'Data updated successfully' }), {
-          headers: {
-            'Content-Type': 'application/json',
-            ...CORS_HEADERS,
-          },
-        });
-      } else {
-        return new Response('Not found', { status: 404 });
+        case 'token-stats': {
+          let cachedData = null;
+          
+          if (!isDev) {
+            const today = new Date().toISOString().split('T')[0];
+            console.log('Checking cache for date:', today);
+            cachedData = await env.SMART_MONEY_CACHE.get(`positions:${today}`);
+            if (cachedData) {
+              try {
+                cachedData = JSON.parse(cachedData);
+                // Record cache hit
+                await recordMetrics(env, { cache_hits: 1 }, isDev);
+              } catch (e) {
+                console.error('Error parsing cached data:', e);
+                cachedData = null;
+              }
+            }
+            console.log('Cache hit:', !!cachedData);
+          }
+
+          if (cachedData) {
+            console.log('Returning cached data');
+            const processingTime = Date.now() - startTime;
+            await recordMetrics(env, { processing_time: processingTime }, isDev);
+            
+            return new Response(JSON.stringify({
+              data: cachedData,
+              from_cache: true,
+              last_updated: new Date().toISOString()
+            }), {
+              status: 200,
+              headers: {
+                'Content-Type': 'application/json',
+                ...CORS_HEADERS,
+              },
+            });
+          }
+
+          console.log('Fetching fresh data from Copin API');
+          const copinService = new CopinService(COPIN_BASE_URL, COPIN_API_KEY);
+          const positions = await copinService.getPositions();
+          console.log(`Fetched ${positions.length} positions`);
+          
+          const processedData = await processPositionData(positions);
+          console.log(`Processed ${processedData.length} tokens`);
+
+          // Only cache in production environment
+          if (!isDev) {
+            console.log('Updating cache with fresh data');
+            const today = new Date().toISOString().split('T')[0];
+            await env.SMART_MONEY_CACHE.put(
+              `positions:${today}`,
+              JSON.stringify(processedData)
+            );
+          }
+
+          const processingTime = Date.now() - startTime;
+          await recordMetrics(env, { processing_time: processingTime }, isDev);
+
+          return new Response(JSON.stringify({
+            data: processedData,
+            from_cache: false,
+            last_updated: new Date().toISOString()
+          }), {
+            status: 200,
+            headers: {
+              'Content-Type': 'application/json',
+              ...CORS_HEADERS,
+            },
+          });
+        }
+        
+        default:
+          return new Response(JSON.stringify({
+            error: 'Not Found',
+            message: `Endpoint '${path}' does not exist`
+          }), {
+            status: 404,
+            headers: {
+              'Content-Type': 'application/json',
+              ...CORS_HEADERS,
+            },
+          });
       }
     } catch (error) {
-      console.error('Error handling request:', error);
-      return new Response(JSON.stringify({ 
-        error: 'Internal server error', 
-        details: error instanceof Error ? error.message : 'Unknown error'
-      }), { 
+      console.error('Error processing request:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      
+      // Record error
+      await recordMetrics(env, { api_errors: 1 }, isDev);
+      
+      const processingTime = Date.now() - startTime;
+      await recordMetrics(env, { processing_time: processingTime }, isDev);
+
+      return new Response(JSON.stringify({
+        error: 'Internal server error',
+        message: errorMessage,
+        stack: isDev ? errorStack : undefined
+      }), {
         status: 500,
         headers: {
           'Content-Type': 'application/json',
@@ -596,9 +782,16 @@ export default {
       // Store in R2
       await env.SMART_MONEY_BUCKET.put(R2_KEY, JSON.stringify(positions));
       
-      // Store in database
-      const dbService = new DatabaseService(env.DB);
-      await dbService.storePositions(positions);
+      // Only update cache in production environment
+      if (!event.cron.includes('dev')) {
+        const processedPositions = await processPositionData(positions);
+        await env.SMART_MONEY_CACHE.put(
+          `positions:${new Date().toISOString().split('T')[0]}`,
+          JSON.stringify(processedPositions)
+        );
+      }
+      
+      console.log('Successfully updated position data');
     } catch (error) {
       console.error('Error in scheduled task:', error);
     }
@@ -617,36 +810,21 @@ async function updatePositions(env: Env): Promise<void> {
     // Store in R2
     await env.SMART_MONEY_BUCKET.put(R2_KEY, JSON.stringify(positions));
     
-    // Store in database
-    const dbService = new DatabaseService(env.DB);
-    await dbService.storePositions(positions);
+    // Only update cache in production environment
+    const isDev = process.env.NODE_ENV === 'development';
+    
+    if (!isDev) {
+      console.log('Updating cache with fresh data');
+      const processedPositions = await processPositionData(positions);
+      await env.SMART_MONEY_CACHE.put(
+        `positions:${new Date().toISOString().split('T')[0]}`,
+        JSON.stringify(processedPositions)
+      );
+    }
+    
+    console.log('Successfully updated positions');
   } catch (error) {
     console.error('Error updating positions:', error);
-  }
-}
-
-/**
- * Scheduled task handler
- * Updates position data cache periodically
- * 
- * @param {ScheduledEvent} event - Scheduled event details
- * @param {Env} env - Environment variables and bindings
- * @param {ExecutionContext} ctx - Execution context
- */
-async function scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
-  console.log('Starting scheduled task to update position data');
-  try {
-    const copinService = new CopinService(COPIN_BASE_URL, COPIN_API_KEY);
-    const positions = await copinService.getPositions();
-    
-    // Store in R2
-    await env.SMART_MONEY_BUCKET.put(R2_KEY, JSON.stringify(positions));
-    
-    // Store in database
-    const dbService = new DatabaseService(env.DB);
-    await dbService.storePositions(positions);
-  } catch (error) {
-    console.error('Error in scheduled task:', error);
   }
 }
 
