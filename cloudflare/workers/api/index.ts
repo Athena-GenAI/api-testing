@@ -1,30 +1,20 @@
 /**
- * Smart Money Position Tracker API
+ * Smart Money API
  * 
- * This module implements a Cloudflare Worker that tracks and analyzes smart money positions
- * across various DeFi protocols. It aggregates position data from the Copin API and provides
- * insights into market sentiment through position analysis.
+ * Tracks and analyzes positions from top cryptocurrency traders
  * 
-<<<<<<< Updated upstream
  * Key Features:
- * - Real-time position tracking for major cryptocurrencies
- * - Smart money wallet analysis
+ * - Tracks positions for BTC, ETH, SOL, and other major tokens
+ * - Real-time position tracking and analysis
+ * - Identifies market sentiment through long/short ratios
  * - Cross-protocol position aggregation
- * - Automated data updates via cron
- * - Performance monitoring and metrics
- * - Caching for optimal performance
+ * - Automated hourly updates via cron
  * 
  * Architecture:
  * - Uses Cloudflare Workers for serverless execution
  * - R2 for persistent storage
- * - KV for caching
+ * - KV for high-performance caching
  * - Scheduled updates via cron triggers
-=======
- * Features:
- * - Tracks positions for BTC, ETH, SOL, and other tokens
- * - Identifies market anomalies (extreme long/short positions)
- * - Updates data automatically via cron trigger
->>>>>>> Stashed changes
  * 
  * @module SmartMoneyAPI
  * @version 1.0.0
@@ -124,8 +114,6 @@ const TOKEN_SYMBOLS: { [key: string]: string } = {
   '0x6853ea96ff216fab11d2d930ce3c508556a4bdc4': 'GRIFFAIN_V2'
 };
 
-<<<<<<< Updated upstream
-=======
 // Token symbol mapping
 const TOKEN_SYMBOLS_LOWERCASE: { [key: string]: string } = {
   'wbtc': 'BTC',
@@ -143,7 +131,6 @@ const TOKEN_SYMBOLS_LOWERCASE: { [key: string]: string } = {
 };
 
 // List of smart money perpetual trader wallets
->>>>>>> Stashed changes
 /**
  * Smart Money Wallets
  * Curated list of addresses known for profitable trading
@@ -623,6 +610,7 @@ export default {
    * @param {ScheduledEvent} event - Scheduled event details
    * @param {Env} env - Environment bindings
    * @param {ExecutionContext} ctx - Execution context
+   * @returns {Promise<void>}
    */
   async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
     console.log('Starting scheduled task to update position data');
@@ -778,11 +766,8 @@ async function getAllPositions(env: Env): Promise<Position[]> {
  */
 async function processPositionData(positions: Position[]): Promise<TokenPosition[]> {
   try {
-<<<<<<< Updated upstream
-=======
     console.log('Starting to process positions:', positions.length);
     
->>>>>>> Stashed changes
     // Group positions by token
     const positionsByToken: { [key: string]: Position[] } = {};
     for (const position of positions) {
@@ -795,17 +780,12 @@ async function processPositionData(positions: Position[]): Promise<TokenPosition
         token = TOKEN_SYMBOLS[token.toLowerCase()] || token;
       }
       
-<<<<<<< Updated upstream
-      // Remove $ prefix and standardize format
-      token = token.replace('$', '').toUpperCase();
-=======
       // Clean up token names
       token = token.replace(/^WBTC$/, 'BTC')
                   .replace(/^WETH$/, 'ETH')
                   .replace(/^WSOL$/, 'SOL');
       
       console.log(`Processing position for token ${token} from ${position.protocol}`);
->>>>>>> Stashed changes
       
       if (!positionsByToken[token]) {
         positionsByToken[token] = [];
@@ -828,13 +808,6 @@ async function processPositionData(positions: Position[]): Promise<TokenPosition
       if (stats.total_positions >= 5) {
         // Determine position type based on long percentage
         let position: 'LONG' | 'SHORT' | 'NEUTRAL';
-<<<<<<< Updated upstream
-        
-        if (stats.long_percentage === 50) {
-          position = 'NEUTRAL';
-        } else {
-          position = stats.long_percentage > 50 ? 'LONG' : 'SHORT';
-=======
         let percentage = stats.long_percentage;
 
         if (percentage === 50) {
@@ -844,17 +817,12 @@ async function processPositionData(positions: Position[]): Promise<TokenPosition
         } else {
           position = 'SHORT';
           percentage = 100 - percentage; // For SHORT positions, use the short percentage
->>>>>>> Stashed changes
         }
 
         const tokenStat = {
           token: token.toUpperCase(), // Ensure uppercase
           total_positions: stats.total_positions,
-<<<<<<< Updated upstream
-          percentage: `${Math.round(stats.long_percentage)}%`,
-=======
           percentage: `${Math.round(percentage)}%`, // Round to whole number
->>>>>>> Stashed changes
           position
         };
         console.log('Adding token stat:', tokenStat);
@@ -904,7 +872,7 @@ async function processPositionData(positions: Position[]): Promise<TokenPosition
  * Calculates statistics for a given array of positions
  * 
  * @param {Position[]} positions - Array of positions to process
- * @returns {{ long_count: number, short_count: number, long_percentage: number, short_percentage: number, total_positions: number }} Position statistics
+ * @returns {{ long_count: number, short_count: number, total_positions: number, long_percentage: number, short_percentage: number }} Position statistics
  */
 function processPositionStatistics(positions: Position[]): {
   long_count: number;
@@ -913,14 +881,6 @@ function processPositionStatistics(positions: Position[]): {
   long_percentage: number;
   short_percentage: number;
 } {
-<<<<<<< Updated upstream
-  const stats = {
-    long_count: 0,
-    short_count: 0,
-    total_positions: positions.length,
-    long_percentage: 0,
-    short_percentage: 0
-=======
   const long_count = positions.filter(p => {
     // Check all possible ways a position could be marked as LONG
     if (p.type === 'LONG' || p.side === 'LONG') return true;
@@ -943,17 +903,9 @@ function processPositionStatistics(positions: Position[]): {
     long_percentage,
     short_percentage,
     total_positions,
->>>>>>> Stashed changes
   };
+}
 
-<<<<<<< Updated upstream
-  // Count long and short positions
-  for (const position of positions) {
-    if (position.isLong || position.type === 'LONG' || position.side === 'LONG') {
-      stats.long_count++;
-    } else {
-      stats.short_count++;
-=======
 /**
  * Cloudflare Worker fetch handler
  * Processes HTTP requests to the API endpoints
@@ -1026,16 +978,10 @@ export default {
       await updatePositions(env);
     } catch (error) {
       console.error('Error in scheduled task:', error);
->>>>>>> Stashed changes
     }
   }
+};
 
-<<<<<<< Updated upstream
-  // Calculate percentages
-  if (stats.total_positions > 0) {
-    stats.long_percentage = (stats.long_count / stats.total_positions) * 100;
-    stats.short_percentage = (stats.short_count / stats.total_positions) * 100;
-=======
 /**
  * Update positions
  * @param env Environment variables and bindings
@@ -1049,14 +995,19 @@ async function updatePositions(env: Env): Promise<void> {
     await env.SMART_MONEY_BUCKET.put(R2_KEY, JSON.stringify(positions));
   } catch (error) {
     console.error('Error updating positions:', error);
->>>>>>> Stashed changes
   }
-
-  return stats;
 }
 
 /**
-<<<<<<< Updated upstream
+ * Fetch position data for a specific trader and protocol.
+ * 
+ * @param {string} trader_id - Trader ID
+ * @param {string} protocol - Protocol name
+ * @param {Env} env - Environment variables and bindings
+ * @returns {Promise<Position[]>} Array of positions
+ */
+
+/**
  * Record Metrics
  * Records metrics for monitoring API performance and usage
  * 
@@ -1104,14 +1055,6 @@ async function recordMetrics(env: Env, metrics: Partial<MetricsData>, isDev: boo
  * Metrics Data Structure
  * Structure for tracking API performance and usage
  * @interface MetricsData
-=======
- * Fetch position data for a specific trader and protocol.
- * 
- * @param {string} trader_id - Trader ID
- * @param {string} protocol - Protocol name
- * @param {Env} env - Environment variables and bindings
- * @returns {Promise<Position[]>} Array of positions
->>>>>>> Stashed changes
  */
 interface MetricsData {
   total_requests: number;  // Total number of API requests
