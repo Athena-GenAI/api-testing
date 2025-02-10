@@ -9,6 +9,42 @@
 
 Athena AI is an experiment at the intersection of DeFi and GenAI aimed at pushing the boundaries of the Virtuals.io Protocol. Through unwavering collaboration with the Virtuals.io team and other AI agents within the ecosystem, Athena aims to capitalize on this rapidly evolving trend of AI agent capabilities to socialize and transact.
 
+## Smart Money API
+
+The Smart Money API provides real-time insights into trader positions across various cryptocurrencies. It leverages Cloudflare Workers for high performance and reliability.
+
+### Features
+- Real-time position tracking for top cryptocurrencies
+- Intelligent caching for optimal performance
+- Comprehensive metrics and monitoring
+- Development and production environments
+- Integration with game-node project
+
+### Getting Started
+1. Clone the repository
+2. Install dependencies:
+   ```bash
+   cd cloudflare
+   npm install
+   ```
+3. Set up environment variables:
+   ```bash
+   cp .env.example .env
+   # Edit .env with your credentials
+   ```
+4. Run locally:
+   ```bash
+   npm run dev
+   ```
+
+### Documentation
+- [API Documentation](docs/API.md)
+- [Deployment Guide](docs/deployment.md)
+- [Integration Guide](docs/integration.md)
+
+### Endpoints
+- Production: `https://api.0xathena.ai/smart-money`
+- Development: `https://smart-money-api-dev.ggenega.workers.dev/smart-money`
 
 ---
 
